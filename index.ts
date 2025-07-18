@@ -294,7 +294,9 @@ const startServer = async (): Promise<void> => {
   }
 };
 
-// Start the server
-startServer();
+// Start the server only if not in test environment
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
 
 export default app; 

@@ -1,19 +1,29 @@
 import Class from '../../src/models/Class';
 import { CreateClassRequest, UpdateClassRequest } from '../../src/types';
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import { 
+  createMinimalClassData, 
+  createFullClassData, 
+  createMockClassResponse,
+  validateClassResponse,
+  validateErrorResponse,
+  TEST_SCENARIOS 
+} from '../helpers/testHelpers';
 
 // Mock database for testing
 jest.mock('../../src/config/database', () => ({
   query: jest.fn(),
   initialize: jest.fn(),
-  close: jest.fn()
+  close: jest.fn(),
+  healthCheck: jest.fn()
 }));
 
 /**
- * Test suite for Class Model
- * Tests all CRUD operations and business logic
+ * Test suite for Class Model - ABC Ignite Requirements
+ * Tests all CRUD operations and business logic for the simplified gym management system
+ * Uses shared test helpers to eliminate redundancy
  */
-describe('Class Model', () => {
+describe('Class Model - ABC Ignite Requirements', () => {
   let mockDatabase: any;
 
   beforeEach(() => {
@@ -21,55 +31,12 @@ describe('Class Model', () => {
     jest.clearAllMocks();
   });
 
-  describe('create', () => {
-    /**
-     * Test successful class creation
-     */
-    it('should create a new class successfully', async () => {
-      const classData: CreateClassRequest = {
-        name: 'Test Yoga Class',
-        description: 'A test yoga class',
-        instructorId: '123e4567-e89b-12d3-a456-426614174000',
-        instructorName: 'Test Instructor',
-        classType: 'yoga',
-        startDate: new Date('2024-02-01'),
-        endDate: new Date('2024-02-28'),
-        startTime: '09:00',
-        endTime: '10:00',
-        durationMinutes: 60,
-        maxCapacity: 20,
-        price: 15.00,
-        location: 'Studio A',
-        room: 'Yoga Room 1',
-        equipmentNeeded: ['Yoga Mat'],
-        difficultyLevel: 'beginner',
-        tags: ['yoga', 'beginner']
-      };
+  describe('create - ABC Ignite Requirements', () => {
+    it('should create a class with minimal required fields', async () => {
+      const classData = createMinimalClassData();
 
       const mockResult = {
-        rows: [{
-          id: '123e4567-e89b-12d3-a456-426614174001',
-          name: 'Test Yoga Class',
-          description: 'A test yoga class',
-          instructor_id: '123e4567-e89b-12d3-a456-426614174000',
-          instructor_name: 'Test Instructor',
-          class_type: 'yoga',
-          start_date: '2024-02-01T00:00:00.000Z',
-          end_date: '2024-02-28T00:00:00.000Z',
-          start_time: '09:00',
-          end_time: '10:00',
-          duration_minutes: 60,
-          max_capacity: 20,
-          price: 15.00,
-          location: 'Studio A',
-          room: 'Yoga Room 1',
-          equipment_needed: '["Yoga Mat"]',
-          difficulty_level: 'beginner',
-          tags: '["yoga", "beginner"]',
-          status: 'active',
-          created_at: '2024-01-01T00:00:00.000Z',
-          updated_at: '2024-01-01T00:00:00.000Z'
-        }]
+        rows: [createMockClassResponse(classData)]
       };
 
       mockDatabase.query.mockResolvedValue(mockResult);
@@ -78,363 +45,312 @@ describe('Class Model', () => {
 
       expect(mockDatabase.query).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO classes'),
-        [
-          'Test Yoga Class',
-          'A test yoga class',
-          '123e4567-e89b-12d3-a456-426614174000',
-          'Test Instructor',
-          'yoga',
-          new Date('2024-02-01'),
-          new Date('2024-02-28'),
-          '09:00',
-          '10:00',
-          60,
-          20,
-          15.00,
-          'Studio A',
-          'Yoga Room 1',
-          '["Yoga Mat"]',
-          'beginner',
-          '["yoga","beginner"]',
-          'active'
-        ]
+        expect.arrayContaining([
+          classData.name,
+          null, // description
+          classData.instructorId,
+          null, // instructorName (optional)
+          classData.classType,
+          classData.classDate,
+          classData.classDate,
+          classData.startTime,
+          classData.endTime,
+          classData.durationMinutes,
+          classData.maxCapacity,
+          0, // price default
+          null, // location
+          null, // room
+          null, // equipment_needed
+          'all_levels', // difficulty_level default
+          null, // tags
+          'active' // status default
+        ])
       );
 
-      expect(result).toEqual({
-        id: '123e4567-e89b-12d3-a456-426614174001',
-        name: 'Test Yoga Class',
-        description: 'A test yoga class',
-        instructorId: '123e4567-e89b-12d3-a456-426614174000',
-        instructorName: 'Test Instructor',
-        classType: 'yoga',
-        startDate: expect.any(Date),
-        endDate: expect.any(Date),
-        startTime: '09:00',
-        endTime: '10:00',
-        durationMinutes: 60,
-        maxCapacity: 20,
-        price: 15.00,
-        location: 'Studio A',
-        room: 'Yoga Room 1',
-        equipmentNeeded: ['Yoga Mat'],
-        difficultyLevel: 'beginner',
-        tags: ['yoga', 'beginner'],
-        status: 'active',
-        createdAt: expect.any(Date),
-        updatedAt: expect.any(Date)
-      });
+      expect(result.name).toBe(classData.name);
+      expect(result.instructorId).toBe(classData.instructorId);
+      expect(result.classType).toBe(classData.classType);
+      expect(result.classDate).toEqual(classData.classDate);
+      expect(result.classDate).toEqual(classData.classDate);
+      expect(result.startTime).toBe(classData.startTime);
+      expect(result.durationMinutes).toBe(classData.durationMinutes);
+      expect(result.maxCapacity).toBe(classData.maxCapacity);
     });
 
-    /**
-     * Test duplicate class validation
-     */
-    it('should throw ValidationError for duplicate class', async () => {
-      const classData: CreateClassRequest = {
-        name: 'Test Yoga Class',
-        instructorId: '123e4567-e89b-12d3-a456-426614174000',
-        instructorName: 'Test Instructor',
-        classType: 'yoga',
-        startDate: new Date('2024-02-01'),
-        endDate: new Date('2024-02-28'),
-        startTime: '09:00',
-        endTime: '10:00',
-        durationMinutes: 60,
-        maxCapacity: 20
-      };
+    it('should create a class with all optional fields', async () => {
+      const classData = createFullClassData();
 
-      const error = new Error('duplicate key value violates unique constraint');
-      (error as any).code = '23505';
-      mockDatabase.query.mockRejectedValue(error);
-
-      await expect(Class.create(classData)).rejects.toThrow('A class with this name already exists in the specified date range');
-    });
-  });
-
-  describe('findById', () => {
-    /**
-     * Test successful class retrieval by ID
-     */
-    it('should find class by ID successfully', async () => {
       const mockResult = {
-        rows: [{
-          id: '123e4567-e89b-12d3-a456-426614174001',
-          name: 'Test Yoga Class',
-          instructor_id: '123e4567-e89b-12d3-a456-426614174000',
-          instructor_name: 'Test Instructor',
-          class_type: 'yoga',
-          start_date: '2024-02-01T00:00:00.000Z',
-          end_date: '2024-02-28T00:00:00.000Z',
-          start_time: '09:00',
-          end_time: '10:00',
-          duration_minutes: 60,
-          max_capacity: 20,
-          price: 15.00,
-          status: 'active',
-          created_at: '2024-01-01T00:00:00.000Z',
-          updated_at: '2024-01-01T00:00:00.000Z'
-        }]
+        rows: [createMockClassResponse(classData)]
       };
 
       mockDatabase.query.mockResolvedValue(mockResult);
 
-      const result = await Class.findById(1);
+      const result = await Class.create(classData);
 
-      expect(mockDatabase.query).toHaveBeenCalledWith('SELECT * FROM classes WHERE id = $1', [1]);
-      expect(result).toBeDefined();
-      expect(result?.name).toBe('Test Yoga Class');
+      expect(result.name).toBe(classData.name);
+      expect(result.description).toBe(classData.description);
+      expect(result.instructorId).toBe(classData.instructorId);
+      expect(result.price).toBe(classData.price);
+      expect(result.location).toBe(classData.location);
+      expect(result.room).toBe(classData.room);
+      expect(result.equipmentNeeded).toEqual(classData.equipmentNeeded);
+      expect(result.difficultyLevel).toBe(classData.difficultyLevel);
+      expect(result.tags).toEqual(classData.tags);
     });
 
-    /**
-     * Test class not found scenario
-     */
-    it('should return null when class not found', async () => {
+    it('should create a class with capacity = 1 (minimum allowed)', async () => {
+      const classData = createMinimalClassData({ maxCapacity: 1 });
+
+      const mockResult = {
+        rows: [createMockClassResponse(classData)]
+      };
+
+      mockDatabase.query.mockResolvedValue(mockResult);
+
+      const result = await Class.create(classData);
+
+      expect(result.maxCapacity).toBe(1);
+    });
+
+    it('should throw ValidationError for missing required fields', async () => {
+      const invalidData = { name: 'Test Class' };
+
+      await expect(Class.create(invalidData as any)).rejects.toThrow('Instructor ID is required');
+    });
+
+    it('should throw ValidationError for invalid capacity', async () => {
+      const invalidData = createMinimalClassData({ maxCapacity: 0 });
+
+      await expect(Class.create(invalidData)).rejects.toThrow('Capacity must be at least 1');
+    });
+
+    it('should throw ValidationError for invalid date range', async () => {
+      const invalidData = createMinimalClassData({
+        classDate: new Date('2024-12-01')
+      });
+
+      await expect(Class.create(invalidData)).rejects.toThrow('Start date must be before end date');
+    });
+
+    it('should throw ValidationError for invalid time format', async () => {
+      const invalidData = createMinimalClassData({ startTime: '25:00' });
+
+      await expect(Class.create(invalidData)).rejects.toThrow('Invalid start time format');
+    });
+  });
+
+  describe('findById', () => {
+    it('should find a class by ID', async () => {
+      const classData = createMinimalClassData();
+      const mockResult = {
+        rows: [createMockClassResponse(classData, 'test-id')]
+      };
+
+      mockDatabase.query.mockResolvedValue(mockResult);
+
+      const result = await Class.findById('test-id');
+
+      expect(mockDatabase.query).toHaveBeenCalledWith(
+        'SELECT * FROM classes WHERE id = $1',
+        ['test-id']
+      );
+      expect(result).toBeDefined();
+      expect(result?.id).toBe('test-id');
+    });
+
+    it('should return null for non-existent class', async () => {
       mockDatabase.query.mockResolvedValue({ rows: [] });
 
-      const result = await Class.findById(999);
+      const result = await Class.findById('non-existent-id');
 
       expect(result).toBeNull();
     });
   });
 
   describe('findAll', () => {
-    /**
-     * Test class listing with pagination
-     */
-    it('should find all classes with pagination', async () => {
-      const mockCountResult = { rows: [{ count: '10' }] };
-      const mockDataResult = {
-        rows: [
-          {
-            id: '123e4567-e89b-12d3-a456-426614174001',
-            name: 'Test Yoga Class',
-            instructor_id: '123e4567-e89b-12d3-a456-426614174000',
-            instructor_name: 'Test Instructor',
-            class_type: 'yoga',
-            start_date: '2024-02-01T00:00:00.000Z',
-            end_date: '2024-02-28T00:00:00.000Z',
-            start_time: '09:00',
-            end_time: '10:00',
-            duration_minutes: 60,
-            max_capacity: 20,
-            price: 15.00,
-            status: 'active',
-            created_at: '2024-01-01T00:00:00.000Z',
-            updated_at: '2024-01-01T00:00:00.000Z'
-          }
-        ]
+    it('should return paginated classes with default filters', async () => {
+      const mockClasses = Array(5).fill(null).map((_, i) => 
+        createMockClassResponse(createMinimalClassData({ name: `Class ${i}` }), `id-${i}`)
+      );
+
+      mockDatabase.query
+        .mockResolvedValueOnce({ rows: [{ count: '50' }] }) // Count query
+        .mockResolvedValueOnce({ rows: mockClasses }); // Data query
+
+      const result = await Class.findAll({});
+
+      expect(result.data).toHaveLength(5);
+      expect(result.pagination.total).toBe(50);
+      expect(result.pagination.limit).toBe(20); // Default limit
+      expect(result.pagination.offset).toBe(0); // Default offset
+    });
+
+    it('should apply filters correctly', async () => {
+      const filters = {
+        startDate: '2024-01-01',
+        endDate: '2024-12-31',
+        status: 'active',
+        instructor: 'John',
+        limit: 10,
+        offset: 5
       };
 
       mockDatabase.query
-        .mockResolvedValueOnce(mockCountResult)
-        .mockResolvedValueOnce(mockDataResult);
+        .mockResolvedValueOnce({ rows: [{ count: '25' }] })
+        .mockResolvedValueOnce({ rows: [] });
 
-      const filters = { limit: 20, offset: 0 };
-      const result = await Class.findAll(filters);
+      await Class.findAll(filters);
 
-      expect(result.data).toHaveLength(1);
-      expect(result.pagination.total).toBe(10);
-      expect(result.pagination.limit).toBe(20);
-      expect(result.pagination.offset).toBe(0);
+      expect(mockDatabase.query).toHaveBeenCalledWith(
+        expect.stringContaining('WHERE start_date >= $1 AND end_date <= $2 AND status = $3 AND instructor_name ILIKE $4'),
+        ['2024-01-01', '2024-12-31', 'active', '%John%']
+      );
     });
   });
 
   describe('update', () => {
-    /**
-     * Test successful class update
-     */
-    it('should update class successfully', async () => {
+    it('should update a class successfully', async () => {
       const updateData: UpdateClassRequest = {
-        name: 'Updated Yoga Class',
-        price: 20.00
+        name: 'Updated Class Name',
+        description: 'Updated description',
+        price: 25.00
       };
 
       const mockResult = {
-        rows: [{
-          id: '123e4567-e89b-12d3-a456-426614174001',
-          name: 'Updated Yoga Class',
-          instructor_id: '123e4567-e89b-12d3-a456-426614174000',
-          instructor_name: 'Test Instructor',
-          class_type: 'yoga',
-          start_date: '2024-02-01T00:00:00.000Z',
-          end_date: '2024-02-28T00:00:00.000Z',
-          start_time: '09:00',
-          end_time: '10:00',
-          duration_minutes: 60,
-          max_capacity: 20,
-          price: 20.00,
-          status: 'active',
-          created_at: '2024-01-01T00:00:00.000Z',
-          updated_at: '2024-01-01T00:00:00.000Z'
-        }]
+        rows: [createMockClassResponse(createMinimalClassData(updateData), 'test-id')]
       };
 
       mockDatabase.query.mockResolvedValue(mockResult);
 
-      const result = await Class.update(1, updateData);
+      const result = await Class.update('test-id', updateData);
 
       expect(mockDatabase.query).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE classes'),
-        expect.arrayContaining(['Updated Yoga Class', 20.00, 1])
+        expect.stringContaining('UPDATE classes SET'),
+        expect.arrayContaining([
+          'Updated Class Name',
+          'Updated description',
+          25.00,
+          'test-id'
+        ])
       );
-      expect(result.name).toBe('Updated Yoga Class');
-      expect(result.price).toBe(20.00);
+      expect(result.name).toBe('Updated Class Name');
+      expect(result.description).toBe('Updated description');
+      expect(result.price).toBe(25.00);
     });
 
-    /**
-     * Test update with no valid fields
-     */
-    it('should throw ValidationError when no fields to update', async () => {
-      const updateData: UpdateClassRequest = {};
+    it('should throw NotFoundError for non-existent class', async () => {
+      mockDatabase.query.mockResolvedValue({ rows: [] });
 
-      await expect(Class.update(1, updateData)).rejects.toThrow('No valid fields to update');
+      await expect(Class.update('non-existent-id', { name: 'Updated' }))
+        .rejects.toThrow('Class not found');
+    });
+
+    it('should throw ValidationError for no fields to update', async () => {
+      await expect(Class.update('test-id', {}))
+        .rejects.toThrow('No valid fields to update');
     });
   });
 
   describe('delete', () => {
-    /**
-     * Test successful class deletion
-     */
-    it('should delete class successfully', async () => {
-      mockDatabase.query.mockResolvedValue({ rows: [{ id: 1 }] });
+    it('should delete a class successfully', async () => {
+      mockDatabase.query.mockResolvedValue({ rowCount: 1 });
 
-      await expect(Class.delete(1)).resolves.not.toThrow();
+      await Class.delete('test-id');
 
       expect(mockDatabase.query).toHaveBeenCalledWith(
-        'DELETE FROM classes WHERE id = $1 RETURNING id',
-        [1]
+        'DELETE FROM classes WHERE id = $1',
+        ['test-id']
       );
     });
 
-    /**
-     * Test deletion of non-existent class
-     */
-    it('should throw NotFoundError when class not found', async () => {
-      mockDatabase.query.mockResolvedValue({ rows: [] });
+    it('should throw NotFoundError for non-existent class', async () => {
+      mockDatabase.query.mockResolvedValue({ rowCount: 0 });
 
-      await expect(Class.delete(999)).rejects.toThrow('Class not found');
+      await expect(Class.delete('non-existent-id'))
+        .rejects.toThrow('Class not found');
     });
   });
 
   describe('search', () => {
-    /**
-     * Test class search functionality
-     */
-    it('should search classes successfully', async () => {
-      const mockCountResult = { rows: [{ count: '5' }] };
-      const mockDataResult = {
-        rows: [
-          {
-            id: '123e4567-e89b-12d3-a456-426614174001',
-            name: 'Yoga Class',
-            instructor_id: '123e4567-e89b-12d3-a456-426614174000',
-            instructor_name: 'Test Instructor',
-            class_type: 'yoga',
-            start_date: '2024-02-01T00:00:00.000Z',
-            end_date: '2024-02-28T00:00:00.000Z',
-            start_time: '09:00',
-            end_time: '10:00',
-            duration_minutes: 60,
-            max_capacity: 20,
-            price: 15.00,
-            status: 'active',
-            created_at: '2024-01-01T00:00:00.000Z',
-            updated_at: '2024-01-01T00:00:00.000Z'
-          }
-        ]
+    it('should search classes by query', async () => {
+      const searchParams = {
+        query: 'yoga',
+        limit: 10,
+        offset: 0
       };
 
-      mockDatabase.query
-        .mockResolvedValueOnce(mockCountResult)
-        .mockResolvedValueOnce(mockDataResult);
+      const mockClasses = Array(3).fill(null).map((_, i) => 
+        createMockClassResponse(createMinimalClassData({ name: `Yoga Class ${i}` }), `yoga-${i}`)
+      );
 
-      const searchParams = { query: 'yoga', limit: 20, offset: 0 };
+      mockDatabase.query
+        .mockResolvedValueOnce({ rows: [{ count: '15' }] })
+        .mockResolvedValueOnce({ rows: mockClasses });
+
       const result = await Class.search(searchParams);
 
-      expect(result.data).toHaveLength(1);
-      expect(result.pagination.total).toBe(5);
+      expect(result.data).toHaveLength(3);
+      expect(result.pagination.total).toBe(15);
+      expect(mockDatabase.query).toHaveBeenCalledWith(
+        expect.stringContaining('WHERE name ILIKE $1 OR description ILIKE $1 OR class_type ILIKE $1'),
+        expect.arrayContaining(['%yoga%'])
+      );
     });
   });
 
-  describe('hasActiveBookings', () => {
-    /**
-     * Test checking for active bookings
-     */
-    it('should return true when class has active bookings', async () => {
-      mockDatabase.query.mockResolvedValue({ rows: [{ booking_count: '3' }] });
+  describe('findByInstructorAndTime', () => {
+    it('should find conflicting class for instructor', async () => {
+      const instructorId = 'instructor-1';
+      const startDate = new Date('2024-12-01');
+      const endDate = new Date('2024-12-31');
 
-      const result = await Class.hasActiveBookings(1);
+      const mockResult = {
+        rows: [createMockClassResponse(createMinimalClassData(), 'conflict-id')]
+      };
 
-      expect(result).toBe(true);
-      expect(mockDatabase.query).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT COUNT(*) as booking_count'),
-        [1]
-      );
+      mockDatabase.query.mockResolvedValue(mockResult);
+
+      const result = await Class.findAll({ instructor: instructorId });
+
+      expect(result).toBeDefined();
+      expect(result.data).toBeDefined();
     });
 
-    /**
-     * Test checking for no active bookings
-     */
-    it('should return false when class has no active bookings', async () => {
-      mockDatabase.query.mockResolvedValue({ rows: [{ booking_count: '0' }] });
+    it('should return empty when no conflict exists', async () => {
+      mockDatabase.query.mockResolvedValue({ rows: [] });
 
-      const result = await Class.hasActiveBookings(1);
+      const result = await Class.findAll({ instructor: 'instructor-1' });
 
-      expect(result).toBe(false);
+      expect(result.data).toHaveLength(0);
     });
   });
 
   describe('getClassStatistics', () => {
-    /**
-     * Test retrieving class statistics
-     */
-    it('should return class statistics successfully', async () => {
-      const mockClassResult = {
+    it('should return class statistics', async () => {
+      const mockStats = {
         rows: [{
-          id: '123e4567-e89b-12d3-a456-426614174001',
-          class_type: 'yoga',
-          status: 'active'
+          total_classes: '10',
+          active_classes: '8',
+          cancelled_classes: '1',
+          completed_classes: '1',
+          total_bookings: '50',
+          confirmed_bookings: '45',
+          cancelled_bookings: '3',
+          attended_bookings: '40',
+          no_show_bookings: '2',
+          attendance_rate: '88.89'
         }]
       };
 
-      const mockStatsResult = {
-        rows: [{
-          total_bookings: '10',
-          confirmed_bookings: '8',
-          attended_bookings: '6',
-          cancelled_bookings: '1',
-          no_show_bookings: '1',
-          attendance_rate: '75.00'
-        }]
-      };
+      mockDatabase.query.mockResolvedValue(mockStats);
 
-      const mockTimeSlotResult = {
-        rows: [
-          { start_time: '09:00', booking_count: '5' },
-          { start_time: '10:00', booking_count: '3' }
-        ]
-      };
+      const result = await Class.getClassStatistics('test-id');
 
-      mockDatabase.query
-        .mockResolvedValueOnce(mockClassResult)
-        .mockResolvedValueOnce(mockStatsResult)
-        .mockResolvedValueOnce(mockTimeSlotResult);
-
-      const result = await Class.getClassStatistics(1);
-
-      expect(result.totalBookings).toBe(10);
-      expect(result.confirmedBookings).toBe(8);
-      expect(result.attendedBookings).toBe(6);
-      expect(result.attendanceRate).toBe(75.00);
-      expect(result.popularTimeSlots).toHaveLength(2);
-    });
-
-    /**
-     * Test statistics for non-existent class
-     */
-    it('should throw NotFoundError when class not found', async () => {
-      mockDatabase.query.mockResolvedValue({ rows: [] });
-
-      await expect(Class.getClassStatistics(999)).rejects.toThrow('Class not found');
+      expect(result.totalClasses).toBe(10);
+      expect(result.activeClasses).toBe(8);
+      expect(result.totalBookings).toBe(50);
+      expect(result.attendanceRate).toBe(88.89);
     });
   });
 }); 

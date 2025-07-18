@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import ClassService from '../services/ClassService';
+import Class from '../models/Class';
+import Booking from '../models/Booking';
 import { ValidationError, NotFoundError, ConflictError, ServiceError } from '../utils/errors';
 import logger from '../utils/logger';
 import { asyncHandler } from '../middleware/errorHandler';
@@ -21,7 +22,41 @@ class ClassController {
     try {
       const classData: CreateClassRequest = req.body;
       
-      const result = await ClassService.createClass(classData);
+      // Validate required fields
+      if (!classData.name || !classData.instructorId || !classData.classType || 
+          !classData.classDate || !classData.startTime || !classData.endTime || 
+          !classData.durationMinutes || !classData.maxCapacity) {
+        throw new ValidationError('Missing required fields');
+      }
+
+      // Validate date and time
+      const classDate = new Date(classData.classDate);
+      if (isNaN(classDate.getTime())) {
+        throw new ValidationError('Invalid class date');
+      }
+
+      // Validate time format
+      const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+      if (!timeRegex.test(classData.startTime) || !timeRegex.test(classData.endTime)) {
+        throw new ValidationError('Invalid time format. Use HH:MM format');
+      }
+
+      // Validate capacity
+      if (classData.maxCapacity <= 0) {
+        throw new ValidationError('Max capacity must be greater than 0');
+      }
+
+      // Validate duration
+      if (classData.durationMinutes <= 0) {
+        throw new ValidationError('Duration must be greater than 0');
+      }
+
+      // Validate price if provided
+      if (classData.price !== undefined && classData.price < 0) {
+        throw new ValidationError('Price cannot be negative');
+      }
+
+      const result = await Class.create(classData);
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('POST', '/api/classes', 201, responseTime, { classId: result.id });
@@ -39,7 +74,7 @@ class ClassController {
           success: false,
           error: 'Validation Error',
           message: error.message,
-          details: error.details
+          errors: error.details || [error.message]
         });
         return;
       }
@@ -50,7 +85,7 @@ class ClassController {
           success: false,
           error: 'Conflict Error',
           message: error.message,
-          details: error.details
+          errors: error.details || [error.message]
         });
         return;
       }
@@ -73,9 +108,9 @@ class ClassController {
     const startTime = Date.now();
     
     try {
-      const classId = parseInt(req.params['id'] || '');
+      const classId = req.params['id'];
       
-      if (isNaN(classId)) {
+      if (!classId || classId.trim() === '') {
         const responseTime = Date.now() - startTime;
         logger.logRequest('GET', `/api/classes/${req.params['id']}`, 400, responseTime, { error: 'Invalid class ID' });
         res.status(400).json({
@@ -86,7 +121,11 @@ class ClassController {
         return;
       }
       
-      const result = await ClassService.getClassById(classId);
+      const result = await Class.findById(classId);
+      
+      if (!result) {
+        throw new NotFoundError('Class not found');
+      }
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('GET', `/api/classes/${classId}`, 200, responseTime);
@@ -149,7 +188,7 @@ class ClassController {
         ...(req.query['orderDirection'] && { orderDirection: req.query['orderDirection'] as 'ASC' | 'DESC' }),
       };
       
-      const result = await ClassService.getAllClasses(filters);
+      const result = await Class.findAll(filters);
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('GET', '/api/classes', 200, responseTime, { 
@@ -192,9 +231,9 @@ class ClassController {
     const startTime = Date.now();
     
     try {
-      const classId = parseInt(req.params['id'] || '');
+      const classId = req.params['id'];
       
-      if (isNaN(classId)) {
+      if (!classId || classId.trim() === '') {
         const responseTime = Date.now() - startTime;
         logger.logRequest('PUT', `/api/classes/${req.params['id']}`, 400, responseTime, { error: 'Invalid class ID' });
         res.status(400).json({
@@ -207,7 +246,41 @@ class ClassController {
       
       const updateData: UpdateClassRequest = req.body;
       
-      const result = await ClassService.updateClass(classId, updateData);
+      // Validate time format if provided
+      if (updateData.startTime) {
+        const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        if (!timeRegex.test(updateData.startTime)) {
+          throw new ValidationError('Invalid start time format. Use HH:MM format');
+        }
+      }
+      
+      if (updateData.endTime) {
+        const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        if (!timeRegex.test(updateData.endTime)) {
+          throw new ValidationError('Invalid end time format. Use HH:MM format');
+        }
+      }
+
+      // Validate capacity if provided
+      if (updateData.maxCapacity !== undefined && updateData.maxCapacity <= 0) {
+        throw new ValidationError('Max capacity must be greater than 0');
+      }
+
+      // Validate duration if provided
+      if (updateData.durationMinutes !== undefined && updateData.durationMinutes <= 0) {
+        throw new ValidationError('Duration must be greater than 0');
+      }
+
+      // Validate price if provided
+      if (updateData.price !== undefined && updateData.price < 0) {
+        throw new ValidationError('Price cannot be negative');
+      }
+      
+      const result = await Class.update(classId, updateData);
+      
+      if (!result) {
+        throw new NotFoundError('Class not found');
+      }
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('PUT', `/api/classes/${classId}`, 200, responseTime);
@@ -241,18 +314,7 @@ class ClassController {
         return;
       }
       
-      if (error instanceof ConflictError) {
-        logger.logRequest('PUT', `/api/classes/${classId}`, 409, responseTime, { error: error.message });
-        res.status(409).json({
-          success: false,
-          error: 'Conflict Error',
-          message: error.message,
-          details: error.details
-        });
-        return;
-      }
-      
-      logger.logError('Class update failed', error, { classId, updateData: req.body, responseTime });
+      logger.logError('Class update failed', error, { classId, requestBody: req.body, responseTime });
       res.status(500).json({
         success: false,
         error: 'Internal Server Error',
@@ -270,9 +332,9 @@ class ClassController {
     const startTime = Date.now();
     
     try {
-      const classId = parseInt(req.params['id'] || '');
+      const classId = req.params['id'];
       
-      if (isNaN(classId)) {
+      if (!classId || classId.trim() === '') {
         const responseTime = Date.now() - startTime;
         logger.logRequest('DELETE', `/api/classes/${req.params['id']}`, 400, responseTime, { error: 'Invalid class ID' });
         res.status(400).json({
@@ -283,14 +345,14 @@ class ClassController {
         return;
       }
       
-      const result = await ClassService.deleteClass(classId);
+      await Class.delete(classId);
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('DELETE', `/api/classes/${classId}`, 200, responseTime);
       
       res.status(200).json({
         success: true,
-        data: result
+        message: 'Class deleted successfully'
       });
     } catch (error) {
       const responseTime = Date.now() - startTime;
@@ -335,9 +397,9 @@ class ClassController {
     const startTime = Date.now();
     
     try {
-      const classId = parseInt(req.params['id'] || '');
+      const classId = req.params['id'];
       
-      if (isNaN(classId)) {
+      if (!classId || classId.trim() === '') {
         const responseTime = Date.now() - startTime;
         logger.logRequest('GET', `/api/classes/${req.params['id']}/statistics`, 400, responseTime, { error: 'Invalid class ID' });
         res.status(400).json({
@@ -348,7 +410,7 @@ class ClassController {
         return;
       }
       
-      const result = await ClassService.getClassStatistics(classId);
+      const result = await Class.getClassStatistics(classId);
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('GET', `/api/classes/${classId}/statistics`, 200, responseTime);
@@ -404,7 +466,11 @@ class ClassController {
       const startDate = req.query['startDate'] as string;
       const endDate = req.query['endDate'] as string;
       
-      const result = await ClassService.searchClasses({ query, limit, offset, startDate, endDate });
+      if (!query || query.trim() === '') {
+        throw new ValidationError('Search query is required');
+      }
+      
+      const result = await Class.search({ query, limit, offset, startDate, endDate });
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('GET', '/api/classes/search', 200, responseTime, { 
@@ -414,7 +480,7 @@ class ClassController {
       
       res.status(200).json({
         success: true,
-        data: result
+        ...result
       });
     } catch (error) {
       const responseTime = Date.now() - startTime;
@@ -446,16 +512,18 @@ class ClassController {
     const startTime = Date.now();
     
     try {
-      const classId = parseInt(req.params['id'] || '');
+      const classId = req.params['id'];
+      if (!classId) {
+        throw new ValidationError('Class ID is required');
+      }
       const filters = {
-        classId,
+        classId: classId,
         limit: parseInt(req.query['limit'] as string) || 20,
         offset: parseInt(req.query['offset'] as string) || 0,
-        status: req.query['status'] as string
+        ...(req.query['status'] && { status: req.query['status'] as string })
       };
       
-      const BookingService = require('../services/BookingService').default;
-      const result = await BookingService.getAllBookings(filters);
+      const result = await Booking.findAll(filters);
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('GET', `/api/classes/${classId}/bookings`, 200, responseTime, { 
@@ -464,7 +532,7 @@ class ClassController {
       
       res.status(200).json({
         success: true,
-        data: result
+        ...result
       });
     } catch (error) {
       const responseTime = Date.now() - startTime;

@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
-import InstructorService from '../services/InstructorService';
 import { ValidationError, NotFoundError, ServiceError } from '../utils/errors';
 import logger from '../utils/logger';
 import { asyncHandler } from '../middleware/errorHandler';
 import { AuthenticatedRequest } from '../types';
+import Instructor from '../models/Instructor';
 
 /**
  * Instructor controller with comprehensive request handling and error management
@@ -21,14 +21,40 @@ class InstructorController {
     try {
       const instructorData = req.body;
       
-      const result = await InstructorService.createInstructor(instructorData);
+      // Basic validation
+      if (!instructorData.name || !instructorData.email || !instructorData.specialization) {
+        const responseTime = Date.now() - startTime;
+        logger.logRequest('POST', '/api/instructors', 400, responseTime, { error: 'Missing required fields' });
+        res.status(400).json({
+          success: false,
+          error: 'Validation Error',
+          message: 'Missing required fields (name, email, specialization)'
+        });
+        return;
+      }
+
+      // Check if email is already in use
+      const existingInstructor = await Instructor.findOne({ email: instructorData.email });
+      if (existingInstructor) {
+        const responseTime = Date.now() - startTime;
+        logger.logRequest('POST', '/api/instructors', 400, responseTime, { error: 'Email already in use' });
+        res.status(400).json({
+          success: false,
+          error: 'Validation Error',
+          message: 'Email already in use'
+        });
+        return;
+      }
+
+      const newInstructor = new Instructor(instructorData);
+      await newInstructor.save();
       
       const responseTime = Date.now() - startTime;
-      logger.logRequest('POST', '/api/instructors', 201, responseTime, { instructorId: result.id });
+      logger.logRequest('POST', '/api/instructors', 201, responseTime, { instructorId: newInstructor.id });
       
       res.status(201).json({
         success: true,
-        data: result
+        data: newInstructor
       });
     } catch (error) {
       const responseTime = Date.now() - startTime;
@@ -74,14 +100,25 @@ class InstructorController {
         return;
       }
       
-      const result = await InstructorService.getInstructorById(instructorId);
+      const instructor = await Instructor.findById(instructorId);
+      
+      if (!instructor) {
+        const responseTime = Date.now() - startTime;
+        logger.logRequest('GET', `/api/instructors/${instructorId}`, 404, responseTime, { error: 'Instructor not found' });
+        res.status(404).json({
+          success: false,
+          error: 'Not Found',
+          message: 'Instructor not found'
+        });
+        return;
+      }
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('GET', `/api/instructors/${instructorId}`, 200, responseTime);
       
       res.status(200).json({
         success: true,
-        data: result
+        data: instructor
       });
     } catch (error) {
       const responseTime = Date.now() - startTime;
@@ -125,21 +162,24 @@ class InstructorController {
     const startTime = Date.now();
     
     try {
-      const filters = {
-        ...(req.query['status'] && { status: req.query['status'] as string }),
-        ...(req.query['specialization'] && { specialization: req.query['specialization'] as string }),
-      };
+      const filters: { [key: string]: any } = {};
+      if (req.query['status']) {
+        filters.status = req.query['status'] as string;
+      }
+      if (req.query['specialization']) {
+        filters.specialization = req.query['specialization'] as string;
+      }
       
-      const result = await InstructorService.getAllInstructors(filters);
+      const instructors = await Instructor.find(filters);
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('GET', '/api/instructors', 200, responseTime, { 
-        count: result.length 
+        count: instructors.length 
       });
       
       res.status(200).json({
         success: true,
-        data: result
+        data: instructors
       });
     } catch (error) {
       const responseTime = Date.now() - startTime;
@@ -177,14 +217,54 @@ class InstructorController {
       
       const updateData = req.body;
       
-      const result = await InstructorService.updateInstructor(instructorId, updateData);
+      // Basic validation for update
+      if (!updateData.name && !updateData.email && !updateData.specialization) {
+        const responseTime = Date.now() - startTime;
+        logger.logRequest('PUT', `/api/instructors/${instructorId}`, 400, responseTime, { error: 'No fields to update' });
+        res.status(400).json({
+          success: false,
+          error: 'Validation Error',
+          message: 'No fields to update'
+        });
+        return;
+      }
+
+      const existingInstructor = await Instructor.findById(instructorId);
+      if (!existingInstructor) {
+        const responseTime = Date.now() - startTime;
+        logger.logRequest('PUT', `/api/instructors/${instructorId}`, 404, responseTime, { error: 'Instructor not found' });
+        res.status(404).json({
+          success: false,
+          error: 'Not Found',
+          message: 'Instructor not found'
+        });
+        return;
+      }
+
+      // Check if email is already in use by another instructor
+      if (updateData.email && updateData.email !== existingInstructor.email) {
+        const emailInUse = await Instructor.findOne({ email: updateData.email });
+        if (emailInUse) {
+          const responseTime = Date.now() - startTime;
+          logger.logRequest('PUT', `/api/instructors/${instructorId}`, 400, responseTime, { error: 'Email already in use' });
+          res.status(400).json({
+            success: false,
+            error: 'Validation Error',
+            message: 'Email already in use'
+          });
+          return;
+        }
+      }
+
+      Object.assign(existingInstructor, updateData);
+      await existingInstructor.save();
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('PUT', `/api/instructors/${instructorId}`, 200, responseTime);
       
       res.status(200).json({
         success: true,
-        data: result
+        data: existingInstructor
       });
     } catch (error) {
       const responseTime = Date.now() - startTime;
@@ -241,7 +321,20 @@ class InstructorController {
         return;
       }
       
-      await InstructorService.deleteInstructor(instructorId);
+      const instructor = await Instructor.findById(instructorId);
+      
+      if (!instructor) {
+        const responseTime = Date.now() - startTime;
+        logger.logRequest('DELETE', `/api/instructors/${instructorId}`, 404, responseTime, { error: 'Instructor not found' });
+        res.status(404).json({
+          success: false,
+          error: 'Not Found',
+          message: 'Instructor not found'
+        });
+        return;
+      }
+
+      await instructor.deleteOne();
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('DELETE', `/api/instructors/${instructorId}`, 200, responseTime);
@@ -305,17 +398,23 @@ class InstructorController {
         return;
       }
       
-      const result = await InstructorService.searchInstructors(query);
+      const instructors = await Instructor.find({
+        $or: [
+          { name: { $regex: query, $options: 'i' } },
+          { email: { $regex: query, $options: 'i' } },
+          { specialization: { $regex: query, $options: 'i' } },
+        ]
+      });
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('GET', '/api/instructors/search', 200, responseTime, { 
         query,
-        count: result.length 
+        count: instructors.length 
       });
       
       res.status(200).json({
         success: true,
-        data: result
+        data: instructors
       });
     } catch (error) {
       const responseTime = Date.now() - startTime;
@@ -348,7 +447,17 @@ class InstructorController {
     const startTime = Date.now();
     
     try {
-      const result = await InstructorService.getInstructorStatistics();
+      const totalInstructors = await Instructor.countDocuments();
+      const activeInstructors = await Instructor.countDocuments({ status: 'active' });
+      const inactiveInstructors = await Instructor.countDocuments({ status: 'inactive' });
+      const totalSpecializations = await Instructor.distinct('specialization');
+
+      const result = {
+        totalInstructors,
+        activeInstructors,
+        inactiveInstructors,
+        totalSpecializations: totalSpecializations.length,
+      };
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('GET', '/api/instructors/statistics', 200, responseTime);

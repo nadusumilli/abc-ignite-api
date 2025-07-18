@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import MemberService from '../services/MemberService';
 import { ValidationError, NotFoundError, ServiceError } from '../utils/errors';
 import { ApiResponse, CreateMemberRequest, UpdateMemberRequest, MemberFilters } from '../types';
 import logger from '../utils/logger';
+import Member from '../models/Member';
 
 /**
  * Member controller with comprehensive HTTP handlers
@@ -22,7 +22,7 @@ class MemberController {
       
       logger.info('Creating new member', { email: memberData.email });
       
-      const member = await MemberService.createMember(memberData);
+      const member = await Member.create(memberData);
       
       const response: ApiResponse = {
         success: true,
@@ -83,7 +83,18 @@ class MemberController {
       
       logger.info('Getting member by ID', { memberId: id });
       
-      const member = await MemberService.getMemberById(id);
+      const member = await Member.findById(id);
+      
+      if (!member) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Not found',
+          message: 'Member not found',
+          timestamp: new Date().toISOString()
+        };
+        res.status(404).json(response);
+        return;
+      }
       
       const response: ApiResponse = {
         success: true,
@@ -140,7 +151,18 @@ class MemberController {
       
       logger.info('Getting member by email', { email });
       
-      const member = await MemberService.getMemberByEmail(email);
+      const member = await Member.findOne({ email });
+      
+      if (!member) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Not found',
+          message: 'Member not found',
+          timestamp: new Date().toISOString()
+        };
+        res.status(404).json(response);
+        return;
+      }
       
       const response: ApiResponse = {
         success: true,
@@ -198,7 +220,18 @@ class MemberController {
       
       logger.info('Updating member', { memberId: id });
       
-      const member = await MemberService.updateMember(id, memberData);
+      const member = await Member.findByIdAndUpdate(id, memberData, { new: true });
+      
+      if (!member) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Not found',
+          message: 'Member not found',
+          timestamp: new Date().toISOString()
+        };
+        res.status(404).json(response);
+        return;
+      }
       
       const response: ApiResponse = {
         success: true,
@@ -270,7 +303,18 @@ class MemberController {
       
       logger.info('Deleting member', { memberId: id });
       
-      await MemberService.deleteMember(id);
+      const member = await Member.findByIdAndDelete(id);
+      
+      if (!member) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Not found',
+          message: 'Member not found',
+          timestamp: new Date().toISOString()
+        };
+        res.status(404).json(response);
+        return;
+      }
       
       const response: ApiResponse = {
         success: true,
@@ -340,23 +384,27 @@ class MemberController {
       
       logger.info('Getting all members', { filters });
       
-      const result = await MemberService.getAllMembers(filters);
-      
+      const members = await Member.find(filters);
+      const total = await Member.countDocuments(filters);
+      const totalPages = Math.ceil(total / (filters.limit || 10));
+      const hasNext = filters.page < totalPages;
+      const hasPrev = filters.page > 1;
+
       const response: ApiResponse = {
         success: true,
-        data: result.data,
+        data: members,
         message: 'Members retrieved successfully',
         timestamp: new Date().toISOString()
       };
       
       // Add pagination info to response headers
       res.set({
-        'X-Total-Count': result.pagination.total.toString(),
-        'X-Page': result.pagination.page.toString(),
-        'X-Limit': result.pagination.limit.toString(),
-        'X-Total-Pages': result.pagination.totalPages.toString(),
-        'X-Has-Next': result.pagination.hasNext.toString(),
-        'X-Has-Prev': result.pagination.hasPrev.toString()
+        'X-Total-Count': total.toString(),
+        'X-Page': filters.page.toString(),
+        'X-Limit': filters.limit.toString(),
+        'X-Total-Pages': totalPages.toString(),
+        'X-Has-Next': hasNext.toString(),
+        'X-Has-Prev': hasPrev.toString()
       });
       
       res.status(200).json(response);
@@ -384,11 +432,21 @@ class MemberController {
     try {
       logger.info('Getting member statistics');
       
-      const statistics = await MemberService.getMemberStatistics();
-      
+      const totalMembers = await Member.countDocuments();
+      const activeMembers = await Member.countDocuments({ membershipStatus: 'active' });
+      const inactiveMembers = await Member.countDocuments({ membershipStatus: 'inactive' });
+      const totalRevenue = await Member.aggregate([
+        { $group: { _id: null, totalRevenue: { $sum: '$totalRevenue' } } }
+      ]);
+
       const response: ApiResponse = {
         success: true,
-        data: statistics,
+        data: {
+          totalMembers,
+          activeMembers,
+          inactiveMembers,
+          totalRevenue: totalRevenue.length > 0 ? totalRevenue[0].totalRevenue : 0
+        },
         message: 'Member statistics retrieved successfully',
         timestamp: new Date().toISOString()
       };
@@ -420,16 +478,29 @@ class MemberController {
       
       logger.info('Creating member if not exists', { email: memberData.email });
       
-      const member = await MemberService.createMemberIfNotExists(memberData);
+      const member = await Member.findOne({ email: memberData.email });
+      
+      if (member) {
+        const response: ApiResponse = {
+          success: true,
+          data: member,
+          message: 'Existing member found',
+          timestamp: new Date().toISOString()
+        };
+        res.status(200).json(response);
+        return;
+      }
+
+      const newMember = await Member.create(memberData);
       
       const response: ApiResponse = {
         success: true,
-        data: member,
-        message: member.id ? 'Existing member found' : 'Member created successfully',
+        data: newMember,
+        message: 'Member created successfully',
         timestamp: new Date().toISOString()
       };
       
-      res.status(200).json(response);
+      res.status(201).json(response);
       
     } catch (error) {
       logger.error('Failed to create member if not exists:', error as Error);

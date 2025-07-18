@@ -27,7 +27,7 @@ const createClassSchema = Joi.object({
   name: Joi.string().trim().min(1).max(100).required(),
   description: Joi.string().trim().max(500).optional(),
   instructorId: Joi.string().guid({ version: 'uuidv4' }).required(),
-  instructorName: Joi.string().trim().max(100).required(),
+  instructorName: Joi.string().trim().max(100).optional(),
   classType: Joi.string().trim().max(50).required(),
   startDate: Joi.date().iso().min('now').required(),
   endDate: Joi.date().iso().min(Joi.ref('startDate')).required(),

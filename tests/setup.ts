@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import { Pool } from 'pg';
 import { beforeAll, afterEach, afterAll } from '@jest/globals';
+import database from '../src/config/database';
 
 // Load test environment variables
 dotenv.config();
@@ -34,6 +35,10 @@ let testPool: Pool;
  */
 export async function setupTestDatabase(): Promise<void> {
   try {
+    // Initialize the main database connection for tests
+    await database.initialize();
+    
+    // Also set up test pool for direct database operations
     testPool = new Pool(testDbConfig);
     
     // Test connection
@@ -122,6 +127,10 @@ export async function teardownTestDatabase(): Promise<void> {
       await testPool.end();
       console.log('✅ Test database connection closed');
     }
+    
+    // Close the main database connection
+    await database.close();
+    console.log('✅ Main database connection closed');
   } catch (error) {
     console.warn('⚠️  Failed to teardown test database:', (error as Error).message);
   }

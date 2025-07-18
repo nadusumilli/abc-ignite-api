@@ -1,22 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
 import { Pool, PoolClient } from 'pg';
 
-// Base interfaces
+// Base entity interface
 export interface BaseEntity {
   id: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Class related types
+// Class related types (simplified without templates)
 export interface Class extends BaseEntity {
   name: string;
   description?: string;
   instructorId: string;
-  instructorName: string;
   classType: string;
-  startDate: Date;
-  endDate: Date;
+  classDate: Date;
   startTime: string;
   endTime: string;
   durationMinutes: number;
@@ -34,10 +32,8 @@ export interface CreateClassRequest {
   name: string;
   description?: string;
   instructorId: string;
-  instructorName: string;
   classType: string;
-  startDate: Date;
-  endDate: Date;
+  classDate: Date;
   startTime: string;
   endTime: string;
   durationMinutes: number;
@@ -65,13 +61,10 @@ export interface ClassFilters {
   orderDirection?: 'ASC' | 'DESC';
 }
 
-// Booking related types
+// Booking related types (1NF compliant - no redundant member data)
 export interface Booking extends BaseEntity {
   classId: string;
   memberId: string;
-  memberName: string;
-  memberEmail: string;
-  memberPhone?: string;
   participationDate: Date;
   notes?: string;
   status: 'pending' | 'confirmed' | 'cancelled' | 'attended' | 'no_show';
@@ -79,14 +72,15 @@ export interface Booking extends BaseEntity {
   cancelledAt?: Date;
   cancelledBy?: string;
   cancellationReason?: string;
+  // Member information from JOINs (not stored in bookings table)
+  memberName?: string;
+  memberEmail?: string;
+  memberPhone?: string;
 }
 
 export interface CreateBookingRequest {
   classId: string;
   memberId: string;
-  memberName: string;
-  memberEmail: string;
-  memberPhone?: string;
   participationDate: string;
   notes?: string;
 }
@@ -103,6 +97,7 @@ export interface BookingFilters {
   startDate?: string;
   endDate?: string;
   classId?: string;
+  memberId?: string;
   memberName?: string;
   status?: string;
   limit?: number;
@@ -167,12 +162,168 @@ export interface PaginatedResponse<T> {
     offset: number;
     page: number;
     totalPages: number;
+    currentPage: number;
     hasNext: boolean;
     hasPrev: boolean;
   };
 }
 
-// Statistics types
+// Analytics types for comprehensive business intelligence
+export interface ClassPerformanceAnalytics {
+  topClasses: Array<{
+    classId: string;
+    className: string;
+    classType: string;
+    instructorName: string;
+    bookingCount: number;
+    maxCapacity: number;
+    fillRate: number;
+    attendedCount: number;
+    noShowCount: number;
+    attendanceRate: number;
+    cancellationRate: number;
+    classDate: string;
+    startTime: string;
+    endTime: string;
+  }>;
+  averageMetrics: {
+    fillRate: number;
+    attendanceRate: number;
+    noShowRate: number;
+    cancellationRate: number;
+  };
+  classTypeBreakdown: Array<{
+    classType: string;
+    totalClasses: number;
+    totalBookings: number;
+    avgFillRate: number;
+    avgAttendanceRate: number;
+  }>;
+  period: {
+    startDate: string;
+    endDate: string;
+  };
+}
+
+export interface MemberEngagementAnalytics {
+  activeMembers: Array<{
+    memberId: string;
+    memberName: string;
+    memberEmail: string;
+    membershipType: string;
+    membershipStatus: string;
+    totalBookings: number;
+    attendedBookings: number;
+    noShowBookings: number;
+    cancelledBookings: number;
+    attendanceRate: number;
+    activeWeeks: number;
+    classTypesTried: number;
+    lastBookingDate: string;
+    firstBookingDate: string;
+    weeksSinceFirstBooking: number;
+  }>;
+  retention: {
+    totalMembers: number;
+    activeMembers: number;
+    recentMembers: number;
+    veryRecentMembers: number;
+    newMembers90d: number;
+    retainedMembers30d: number;
+    retentionRate30d: number;
+    engagementRate30d: number;
+  };
+  membershipBreakdown: Array<{
+    membershipType: string;
+    totalMembers: number;
+    totalBookings: number;
+    avgAttendanceRate: number;
+  }>;
+  period: {
+    startDate: string;
+    endDate: string;
+  };
+}
+
+export interface TimeBasedTrendAnalytics {
+  weeklyTrends: Array<{
+    weekStart: string;
+    totalBookings: number;
+    totalClasses: number;
+    uniqueMembers: number;
+    uniqueInstructors: number;
+    avgFillRate: number;
+    avgAttendanceRate: number;
+  }>;
+  monthlyTrends: Array<{
+    monthStart: string;
+    totalBookings: number;
+    totalClasses: number;
+    uniqueMembers: number;
+    avgFillRate: number;
+  }>;
+  peakHours: Array<{
+    hour: number;
+    bookingCount: number;
+    classCount: number;
+    uniqueMembers: number;
+    classTypes: number;
+    avgFillRate: number;
+    avgAttendanceRate: number;
+  }>;
+  dayOfWeekDemand: Array<{
+    dayOfWeek: number;
+    dayName: string;
+    bookingCount: number;
+    classCount: number;
+    classTypes: number;
+    uniqueMembers: number;
+    uniqueInstructors: number;
+    avgFillRate: number;
+    avgAttendanceRate: number;
+  }>;
+  period: {
+    startDate: string;
+    endDate: string;
+  };
+}
+
+export interface OperationalMetricsAnalytics {
+  capacityMetrics: {
+    totalClasses: number;
+    totalCapacity: number;
+    upcomingClasses: number;
+    pastClasses: number;
+    activeClasses: number;
+    cancelledClasses: number;
+    completedClasses: number;
+    totalBookings: number;
+    overallCapacityUtilization: number;
+  };
+  fillRateDistribution: Array<{
+    category: string;
+    classCount: number;
+    percentage: number;
+  }>;
+  period: {
+    startDate: string;
+    endDate: string;
+  };
+}
+
+export interface ComprehensiveAnalytics {
+  classPerformance: ClassPerformanceAnalytics;
+  memberEngagement: MemberEngagementAnalytics;
+  timeBasedTrends: TimeBasedTrendAnalytics;
+  operationalMetrics: OperationalMetricsAnalytics;
+  generatedAt: string;
+  period: {
+    startDate: string;
+    endDate: string;
+  };
+}
+
+// Legacy statistics types (for backward compatibility)
 export interface ClassStatistics {
   totalClasses: number;
   activeClasses: number;
@@ -219,7 +370,7 @@ export interface SearchQuery {
   endDate?: string;
 }
 
-// Request augmentation
+// Request types
 export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
@@ -278,6 +429,7 @@ export interface QueryOptions {
   rowMode?: 'array' | string;
 }
 
+// Logging types
 export interface LogLevel {
   error: 0;
   warn: 1;
@@ -293,6 +445,7 @@ export interface LogEntry {
   meta?: Record<string, any>;
 }
 
+// Utility types
 export type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
 export type MiddlewareFunction = (req: Request, res: Response, next: NextFunction) => void | Promise<void>;
 export type TransactionCallback<T = any> = (client: PoolClient) => Promise<T>; 

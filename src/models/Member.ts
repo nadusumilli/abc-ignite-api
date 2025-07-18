@@ -310,17 +310,89 @@ class Member {
       return {
         data: members,
         pagination: {
-          page,
-          limit,
           total,
+          limit,
+          offset,
+          page: Math.floor(offset / limit) + 1,
           totalPages: Math.ceil(total / limit),
-          hasNext: page < Math.ceil(total / limit),
-          hasPrev: page > 1
+          hasNext: Math.floor(offset / limit) + 1 < Math.ceil(total / limit),
+          hasPrev: Math.floor(offset / limit) + 1 > 1
         }
       };
 
     } catch (error) {
       throw new ServiceError('Failed to get members');
+    }
+  }
+
+  /**
+   * Searches members with full-text search capabilities
+   * @param {Object} searchParams - Search parameters
+   * @param {string} searchParams.query - Search query string
+   * @param {number} [searchParams.limit=20] - Maximum number of results
+   * @param {number} [searchParams.offset=0] - Number of results to skip
+   * @returns {Promise<PaginatedResponse<MemberType>>} Search results with pagination
+   * @throws {ServiceError} When operation fails
+   */
+  static async search(searchParams: {
+    query: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PaginatedResponse<MemberType>> {
+    try {
+      const { query, limit = 20, offset = 0 } = searchParams;
+
+      if (!query || query.trim().length === 0) {
+        throw new ValidationError('Search query is required');
+      }
+
+      // Count query
+      const countQuery = `
+        SELECT COUNT(*) 
+        FROM members 
+        WHERE name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1
+      `;
+
+      const countResult = await database.query(countQuery, [`%${query.trim()}%`]);
+      const total = parseInt(countResult.rows[0].count);
+
+      // Data query
+      const dataQuery = `
+        SELECT * FROM members 
+        WHERE name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1
+        ORDER BY name ASC
+        LIMIT $2 OFFSET $3
+      `;
+
+      const dataResult = await database.query(dataQuery, [
+        `%${query.trim()}%`,
+        limit,
+        offset
+      ]);
+
+      const members = dataResult.rows.map(row => this.mapDatabaseRowToMember(row));
+
+      const page = Math.floor(offset / limit) + 1;
+      const totalPages = Math.ceil(total / limit);
+      
+      return {
+        data: members,
+        pagination: {
+          total,
+          limit,
+          offset,
+          page,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1
+        }
+      };
+
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+      throw new ServiceError('Failed to search members');
     }
   }
 
@@ -364,7 +436,7 @@ class Member {
       name: row.name,
       email: row.email,
       phone: row.phone,
-      dateOfBirth: row.date_of_birth ? new Date(row.date_of_birth) : undefined,
+      ...(row.date_of_birth && { dateOfBirth: new Date(row.date_of_birth) }),
       membershipType: row.membership_type,
       membershipStatus: row.membership_status,
       emergencyContactName: row.emergency_contact_name,

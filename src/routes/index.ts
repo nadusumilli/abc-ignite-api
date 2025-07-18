@@ -3,6 +3,7 @@ import classRoutes from './classRoutes';
 import bookingRoutes from './bookingRoutes';
 import instructorRoutes from './instructorRoutes';
 import memberRoutes from './memberRoutes';
+import analyticsRoutes from './analyticsRoutes';
 import logger from '../utils/logger';
 import database from '../config/database';
 
@@ -17,13 +18,14 @@ router.get('/', (req: Request, res: Response) => {
     success: true,
     message: 'ABC Ignite API',
     version: process.env['npm_package_version'] || '1.0.0',
-    documentation: {
-      classes: '/api/classes',
-      bookings: '/api/bookings',
-      instructors: '/api/instructors',
-      members: '/api/members',
-      health: '/health'
-    },
+          documentation: {
+        classes: '/api/classes',
+        bookings: '/api/bookings',
+        instructors: '/api/instructors',
+        members: '/api/members',
+        analytics: '/api/analytics',
+        health: '/health'
+      },
     timestamp: new Date().toISOString()
   });
 });
@@ -70,6 +72,7 @@ router.use('/classes', classRoutes);
 router.use('/bookings', bookingRoutes);
 router.use('/instructors', instructorRoutes);
 router.use('/members', memberRoutes);
+router.use('/analytics', analyticsRoutes);
 
 /**
  * 404 handler for undefined API routes
@@ -82,13 +85,14 @@ router.use('*', (req: Request, res: Response) => {
       code: 'API_NOT_FOUND',
       message: 'API endpoint not found',
       path: req.originalUrl,
-      availableEndpoints: {
-        classes: '/api/classes',
-        bookings: '/api/bookings',
-        instructors: '/api/instructors',
-        members: '/api/members',
-        health: '/api/health'
-      }
+              availableEndpoints: {
+          classes: '/api/classes',
+          bookings: '/api/bookings',
+          instructors: '/api/instructors',
+          members: '/api/members',
+          analytics: '/api/analytics',
+          health: '/api/health'
+        }
     }
   });
 });

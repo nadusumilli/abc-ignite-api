@@ -16,7 +16,7 @@ import {
  */
 class Booking {
   /**
-   * Creates a new booking in the database
+   * Creates a new booking in the database with ABC Ignite validation
    * @param {CreateBookingRequest} bookingData - The booking data to create
    * @returns {Promise<BookingType>} The created booking object
    * @throws {ValidationError} When validation fails or booking already exists
@@ -24,20 +24,46 @@ class Booking {
    */
   static async create(bookingData: CreateBookingRequest): Promise<BookingType> {
     try {
+      // ABC Ignite validation - validate required fields and business rules
+      this.validateABCIgniteRequirements(bookingData);
+
+      // Check if class exists and get its capacity
+      const classQuery = 'SELECT max_capacity FROM classes WHERE id = $1';
+      const classResult = await database.query(classQuery, [bookingData.classId]);
+      
+      if (classResult.rows.length === 0) {
+        throw new ValidationError('Class not found');
+      }
+
+      const maxCapacity = classResult.rows[0].max_capacity;
+
+      // Check current bookings for this class on the participation date
+      const currentBookingsQuery = `
+        SELECT COUNT(*) as booking_count 
+        FROM bookings 
+        WHERE class_id = $1 AND participation_date = $2 AND status IN ('pending', 'confirmed')
+      `;
+      const currentBookingsResult = await database.query(currentBookingsQuery, [
+        bookingData.classId, 
+        bookingData.participationDate
+      ]);
+      
+      const currentBookings = parseInt(currentBookingsResult.rows[0].booking_count);
+      
+      if (currentBookings >= maxCapacity) {
+        throw new ValidationError('Class is at maximum capacity for this date');
+      }
+
       const query = `
         INSERT INTO bookings (
-          class_id, member_id, member_name, member_email, member_phone,
-          participation_date, notes, status, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+          class_id, member_id, participation_date, notes, status, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
         RETURNING *
       `;
 
       const values = [
         bookingData.classId,
         bookingData.memberId,
-        bookingData.memberName,
-        bookingData.memberEmail,
-        bookingData.memberPhone || null,
         bookingData.participationDate,
         bookingData.notes || null,
         'pending'
@@ -50,17 +76,21 @@ class Booking {
       if ((error as any).code === '23505') { // Unique constraint violation
         throw new ValidationError('Member already has a booking for this class');
       }
+      // Re-throw ValidationError as-is
+      if (error instanceof ValidationError) {
+        throw error;
+      }
       throw new ServiceError('Failed to create booking');
     }
   }
 
   /**
    * Finds a booking by its ID
-   * @param {number} id - The booking ID to find
+   * @param {string} id - The booking ID to find
    * @returns {Promise<BookingType | null>} The found booking or null if not found
    * @throws {ServiceError} When database operation fails
    */
-  static async findById(id: number): Promise<BookingType | null> {
+  static async findById(id: string): Promise<BookingType | null> {
     try {
       const query = 'SELECT * FROM bookings WHERE id = $1';
       const result = await database.query(query, [id]);
@@ -78,7 +108,7 @@ class Booking {
 
   /**
    * Finds all bookings with advanced filtering and pagination
-   * Optimized with indexed queries and efficient pagination
+   * Optimized with indexed queries and efficient pagination using JOINs for 1NF compliance
    * @param {BookingFilters} filters - Filter criteria for bookings
    * @returns {Promise<PaginatedResponse<BookingType>>} Paginated booking results
    * @throws {ServiceError} When database operation fails
@@ -91,31 +121,37 @@ class Booking {
 
       // Build WHERE conditions with parameterized queries for security
       if (filters.startDate) {
-        whereConditions.push(`participation_date >= $${valueIndex}`);
+        whereConditions.push(`b.participation_date >= $${valueIndex}`);
         values.push(filters.startDate);
         valueIndex++;
       }
 
       if (filters.endDate) {
-        whereConditions.push(`participation_date <= $${valueIndex}`);
+        whereConditions.push(`b.participation_date <= $${valueIndex}`);
         values.push(filters.endDate);
         valueIndex++;
       }
 
       if (filters.classId) {
-        whereConditions.push(`class_id = $${valueIndex}`);
+        whereConditions.push(`b.class_id = $${valueIndex}`);
         values.push(filters.classId);
         valueIndex++;
       }
 
+      if (filters.memberId) {
+        whereConditions.push(`b.member_id = $${valueIndex}`);
+        values.push(filters.memberId);
+        valueIndex++;
+      }
+
       if (filters.memberName) {
-        whereConditions.push(`member_name ILIKE $${valueIndex}`);
+        whereConditions.push(`m.name ILIKE $${valueIndex}`);
         values.push(`%${filters.memberName}%`);
         valueIndex++;
       }
 
       if (filters.status) {
-        whereConditions.push(`status = $${valueIndex}`);
+        whereConditions.push(`b.status = $${valueIndex}`);
         values.push(filters.status);
         valueIndex++;
       }
@@ -123,20 +159,27 @@ class Booking {
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
       // Build ORDER BY clause with validation
-      const orderBy = filters.orderBy || 'created_at';
+      const orderBy = filters.orderBy || 'b.created_at';
       const orderDirection = filters.orderDirection || 'DESC';
       const orderClause = `ORDER BY ${orderBy} ${orderDirection}`;
 
-      // Get total count for pagination
-      const countQuery = `SELECT COUNT(*) FROM bookings ${whereClause}`;
+      // Get total count for pagination with JOIN
+      const countQuery = `
+        SELECT COUNT(*) 
+        FROM bookings b
+        LEFT JOIN members m ON b.member_id = m.id
+        ${whereClause}
+      `;
       const countResult = await database.query(countQuery, values);
       const total = parseInt(countResult.rows[0].count);
 
-      // Get paginated results with optimized query
+      // Get paginated results with optimized query using JOINs
       const limit = Math.min(filters.limit || 20, 100); // Cap at 100 for performance
       const offset = filters.offset || 0;
       const dataQuery = `
-        SELECT * FROM bookings 
+        SELECT b.*, m.name as member_name, m.email as member_email, m.phone as member_phone
+        FROM bookings b
+        LEFT JOIN members m ON b.member_id = m.id
         ${whereClause} 
         ${orderClause} 
         LIMIT $${valueIndex} OFFSET $${valueIndex + 1}
@@ -153,7 +196,10 @@ class Booking {
           limit,
           offset,
           page: Math.floor(offset / limit) + 1,
-          totalPages: Math.ceil(total / limit)
+          totalPages: Math.ceil(total / limit),
+          hasNext: Math.floor(offset / limit) + 1 < Math.ceil(total / limit),
+          hasPrev: Math.floor(offset / limit) + 1 > 1,
+          currentPage: Math.floor(offset / limit) + 1
         }
       };
 
@@ -171,7 +217,7 @@ class Booking {
    * @throws {NotFoundError} When booking is not found
    * @throws {ServiceError} When database operation fails
    */
-  static async update(id: number, updateData: UpdateBookingRequest): Promise<BookingType> {
+  static async update(id: string, updateData: UpdateBookingRequest): Promise<BookingType> {
     try {
       const setClauses: string[] = [];
       const values: any[] = [];
@@ -227,7 +273,7 @@ class Booking {
    * @throws {NotFoundError} When booking is not found
    * @throws {ServiceError} When database operation fails
    */
-  static async delete(id: number): Promise<void> {
+  static async delete(id: string): Promise<void> {
     try {
       const query = 'DELETE FROM bookings WHERE id = $1 RETURNING id';
       const result = await database.query(query, [id]);
@@ -269,42 +315,49 @@ class Booking {
       const { query, limit = 20, offset = 0, startDate, endDate, classId } = searchParams;
 
       let whereConditions: string[] = [
-        `(member_name ILIKE $1 OR member_email ILIKE $1 OR notes ILIKE $1)`
+        `(m.name ILIKE $1 OR m.email ILIKE $1 OR b.notes ILIKE $1)`
       ];
       let values: any[] = [`%${query}%`];
       let valueIndex = 2;
 
       if (startDate) {
-        whereConditions.push(`participation_date >= $${valueIndex}`);
+        whereConditions.push(`b.participation_date >= $${valueIndex}`);
         values.push(startDate);
         valueIndex++;
       }
 
       if (endDate) {
-        whereConditions.push(`participation_date <= $${valueIndex}`);
+        whereConditions.push(`b.participation_date <= $${valueIndex}`);
         values.push(endDate);
         valueIndex++;
       }
 
       if (classId) {
-        whereConditions.push(`class_id = $${valueIndex}`);
+        whereConditions.push(`b.class_id = $${valueIndex}`);
         values.push(classId);
         valueIndex++;
       }
 
       const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
 
-      // Get total count for pagination
-      const countQuery = `SELECT COUNT(*) FROM bookings ${whereClause}`;
+      // Get total count for pagination with JOIN
+      const countQuery = `
+        SELECT COUNT(*) 
+        FROM bookings b
+        LEFT JOIN members m ON b.member_id = m.id
+        ${whereClause}
+      `;
       const countResult = await database.query(countQuery, values);
       const total = parseInt(countResult.rows[0].count);
 
-      // Get paginated results
+      // Get paginated results with JOIN
       values.push(limit, offset);
       const dataQuery = `
-        SELECT * FROM bookings 
+        SELECT b.*, m.name as member_name, m.email as member_email, m.phone as member_phone
+        FROM bookings b
+        LEFT JOIN members m ON b.member_id = m.id
         ${whereClause} 
-        ORDER BY created_at DESC 
+        ORDER BY b.created_at DESC 
         LIMIT $${valueIndex} OFFSET $${valueIndex + 1}
       `;
 
@@ -318,7 +371,10 @@ class Booking {
           limit,
           offset,
           page: Math.floor(offset / limit) + 1,
-          totalPages: Math.ceil(total / limit)
+          totalPages: Math.ceil(total / limit),
+          hasNext: Math.floor(offset / limit) + 1 < Math.ceil(total / limit),
+          hasPrev: Math.floor(offset / limit) + 1 > 1,
+          currentPage: Math.floor(offset / limit) + 1
         }
       };
 
@@ -437,10 +493,10 @@ class Booking {
 
   /**
    * Wrapper method for finding a booking by ID
-   * @param {number} id - The booking ID to find
+   * @param {string} id - The booking ID to find
    * @returns {Promise<BookingType | null>} The found booking or null
    */
-  static async getBookingById(id: number): Promise<BookingType | null> {
+  static async getBookingById(id: string): Promise<BookingType | null> {
     return this.findById(id);
   }
 
@@ -459,16 +515,16 @@ class Booking {
    * @param {UpdateBookingRequest} updateData - The data to update
    * @returns {Promise<BookingType>} The updated booking object
    */
-  static async updateBooking(id: number, updateData: UpdateBookingRequest): Promise<BookingType> {
+  static async updateBooking(id: string, updateData: UpdateBookingRequest): Promise<BookingType> {
     return this.update(id, updateData);
   }
 
   /**
    * Wrapper method for deleting a booking
-   * @param {number} id - The booking ID to delete
+   * @param {string} id - The booking ID to delete
    * @returns {Promise<void>}
    */
-  static async deleteBooking(id: number): Promise<void> {
+  static async deleteBooking(id: string): Promise<void> {
     return this.delete(id);
   }
 
@@ -521,19 +577,16 @@ class Booking {
       memberId: row.member_id,
       memberName: row.member_name,
       memberEmail: row.member_email,
+      memberPhone: row.member_phone,
       participationDate: new Date(row.participation_date),
       status: row.status,
       createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at)
+      updatedAt: new Date(row.updated_at),
+      attendedAt: row.attended_at ? new Date(row.attended_at) : undefined,
+      cancelledAt: row.cancelled_at ? new Date(row.cancelled_at) : undefined,
+      cancelledBy: row.cancelled_by,
+      cancellationReason: row.cancellation_reason
     };
-
-    // Handle optional properties
-    if (row.member_phone) booking.memberPhone = row.member_phone;
-    if (row.notes) booking.notes = row.notes;
-    if (row.attended_at) booking.attendedAt = new Date(row.attended_at);
-    if (row.cancelled_at) booking.cancelledAt = new Date(row.cancelled_at);
-    if (row.cancelled_by) booking.cancelledBy = row.cancelled_by;
-    if (row.cancellation_reason) booking.cancellationReason = row.cancellation_reason;
 
     return booking;
   }
@@ -546,6 +599,33 @@ class Booking {
    */
   private static camelToSnake(str: string): string {
     return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+  }
+
+  /**
+   * Validates ABC Ignite requirements for booking creation
+   * @param {CreateBookingRequest} bookingData - The booking data to validate
+   * @throws {ValidationError} When validation fails
+   */
+  private static validateABCIgniteRequirements(bookingData: CreateBookingRequest): void {
+    // Validate required fields
+    if (!bookingData.memberId || bookingData.memberId.trim() === '') {
+      throw new ValidationError('Member ID is required');
+    }
+    if (!bookingData.classId || bookingData.classId.trim() === '') {
+      throw new ValidationError('Class ID is required');
+    }
+    if (!bookingData.participationDate) {
+      throw new ValidationError('Participation date is required');
+    }
+    
+    // ABC Ignite requirement: participation date must be in the future
+    const participationDate = new Date(bookingData.participationDate);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0); // Reset time to start of day for date comparison
+    
+    if (participationDate <= now) {
+      throw new ValidationError('Participation date must be in the future');
+    }
   }
 }
 

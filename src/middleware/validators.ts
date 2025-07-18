@@ -34,15 +34,14 @@ export const validateCreateClass = [
   body('name')
     .trim()
     .isLength({ min: 1, max: 100 })
-    .withMessage('Class name must be between 1 and 100 characters')
-    .matches(/^[a-zA-Z0-9\s\-_]+$/)
-    .withMessage('Class name can only contain letters, numbers, spaces, hyphens, and underscores'),
+    .withMessage('Class name must be between 1 and 100 characters'),
   
   body('instructorId')
-    .isUUID(4)
-    .withMessage('Instructor ID must be a valid UUID'),
+    .isString()
+    .withMessage('Instructor ID is required'),
   
   body('instructorName')
+    .optional()
     .trim()
     .isLength({ min: 1, max: 100 })
     .withMessage('Instructor name must be between 1 and 100 characters')
@@ -50,55 +49,32 @@ export const validateCreateClass = [
     .withMessage('Instructor name can only contain letters and spaces'),
   
   body('classType')
-    .isIn(['yoga', 'pilates', 'cardio', 'strength', 'dance', 'martial-arts', 'swimming', 'cycling', 'boxing', 'crossfit'])
-    .withMessage('Class type must be one of the allowed values'),
+    .isString()
+    .withMessage('Class type is required'),
   
   body('startDate')
     .isISO8601()
-    .withMessage('Start date must be a valid ISO 8601 date')
-    .custom((value) => {
-      const startDate = new Date(value);
-      const now = new Date();
-      if (startDate <= now) {
-        throw new Error('Start date must be in the future');
-      }
-      return true;
-    }),
+    .withMessage('Start date must be a valid ISO 8601 date'),
   
   body('endDate')
     .isISO8601()
-    .withMessage('End date must be a valid ISO 8601 date')
-    .custom((value, { req }) => {
-      const endDate = new Date(value);
-      const startDate = new Date(req.body.startDate);
-      if (endDate <= startDate) {
-        throw new Error('End date must be after start date');
-      }
-      return true;
-    }),
+    .withMessage('End date must be a valid ISO 8601 date'),
   
   body('startTime')
-    .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
-    .withMessage('Start time must be in HH:MM format'),
+    .isString()
+    .withMessage('Start time is required'),
   
   body('endTime')
-    .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
-    .withMessage('End time must be in HH:MM format')
-    .custom((value, { req }) => {
-      const startTime = req.body.startTime;
-      if (value <= startTime) {
-        throw new Error('End time must be after start time');
-      }
-      return true;
-    }),
+    .isString()
+    .withMessage('End time is required'),
   
   body('durationMinutes')
-    .isInt({ min: 15, max: 480 })
-    .withMessage('Duration must be between 15 and 480 minutes'),
+    .isInt({ min: 1 })
+    .withMessage('Duration must be at least 1 minute'),
   
   body('maxCapacity')
-    .isInt({ min: 1, max: 100 })
-    .withMessage('Max capacity must be between 1 and 100'),
+    .isInt({ min: 1 })
+    .withMessage('Max capacity must be at least 1'),
   
   body('price')
     .optional()
@@ -253,8 +229,8 @@ export const validateUpdateClass = [
  */
 export const validateClassId = [
   param('id')
-    .isUUID(4)
-    .withMessage('Class ID must be a valid UUID'),
+    .isString()
+    .withMessage('Class ID is required'),
   
   handleValidationErrors
 ];
@@ -327,7 +303,7 @@ export const validateClassQuery = [
  * @returns {Array} Array of validation rules
  */
 export const validateClassSearch = [
-  query('query')
+  query('q')
     .trim()
     .isLength({ min: 1, max: 100 })
     .withMessage('Search query must be between 1 and 100 characters'),

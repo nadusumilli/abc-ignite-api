@@ -69,15 +69,15 @@ class DatabaseSetup {
    * @returns {Promise<void>}
    */
   async createDatabase(): Promise<void> {
-    const dbName = process.env.DB_NAME || 'abc_ignite';
+    const dbName = process.env['DB_NAME'] || 'abc_ignite';
 
     // Connect to default postgres database
     const defaultPool = new Pool({
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432'),
+      host: process.env['DB_HOST'] || 'localhost',
+      port: parseInt(process.env['DB_PORT'] || '5432'),
       database: 'postgres',
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres'
+      user: process.env['DB_USER'] || 'postgres',
+      password: process.env['DB_PASSWORD'] || 'postgres'
     });
 
     try {
@@ -270,15 +270,15 @@ class DatabaseSetup {
   async reset(): Promise<void> {
     console.log('🔄 Starting database reset...');
 
-    const dbName = process.env.DB_NAME || 'abc_ignite';
+    const dbName = process.env['DB_NAME'] || 'abc_ignite';
 
     // Connect to default postgres database
     const defaultPool = new Pool({
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432'),
+      host: process.env['DB_HOST'] || 'localhost',
+      port: parseInt(process.env['DB_PORT'] || '5432'),
       database: 'postgres',
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres'
+      user: process.env['DB_USER'] || 'postgres',
+      password: process.env['DB_PASSWORD'] || 'postgres'
     });
 
     try {

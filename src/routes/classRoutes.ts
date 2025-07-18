@@ -1,6 +1,7 @@
 import express from 'express';
 import ClassController from '../controllers/ClassController';
-import { validateRequest, sanitizeRequest } from '../middleware/middleware';
+import { sanitizeRequest } from '../middleware/middleware';
+import { validateCreateClass, validateUpdateClass, validateClassId, validateClassQuery, validateClassSearch } from '../middleware/validators';
 
 const router = express.Router();
 
@@ -16,7 +17,7 @@ const router = express.Router();
  */
 router.post('/', 
   sanitizeRequest,
-  validateRequest,
+  ...validateCreateClass,
   ClassController.createClass
 );
 
@@ -34,7 +35,7 @@ router.post('/',
  */
 router.get('/', 
   sanitizeRequest,
-  validateRequest,
+  ...validateClassQuery,
   ClassController.getAllClasses
 );
 
@@ -49,7 +50,7 @@ router.get('/',
  */
 router.get('/search',
   sanitizeRequest,
-  validateRequest,
+  ...validateClassSearch,
   ClassController.searchClasses
 );
 
@@ -60,7 +61,7 @@ router.get('/search',
  */
 router.get('/:id',
   sanitizeRequest,
-  validateRequest,
+  ...validateClassId,
   ClassController.getClassById
 );
 
@@ -72,7 +73,7 @@ router.get('/:id',
  */
 router.put('/:id',
   sanitizeRequest,
-  validateRequest,
+  ...validateUpdateClass,
   ClassController.updateClass
 );
 
@@ -83,7 +84,7 @@ router.put('/:id',
  */
 router.delete('/:id',
   sanitizeRequest,
-  validateRequest,
+  ...validateClassId,
   ClassController.deleteClass
 );
 
@@ -94,7 +95,7 @@ router.delete('/:id',
  */
 router.get('/:id/statistics',
   sanitizeRequest,
-  validateRequest,
+  ...validateClassId,
   ClassController.getClassStatistics
 );
 
@@ -108,8 +109,17 @@ router.get('/:id/statistics',
  */
 router.get('/:id/bookings',
   sanitizeRequest,
-  validateRequest,
+  ...validateClassId,
   ClassController.getClassBookings
+);
+
+/**
+ * Create multiple classes for date range (ABC Ignite requirement)
+ * POST /api/classes/date-range
+ */
+router.post('/date-range', 
+  validateCreateClass,
+  ClassController.createClassesForDateRange
 );
 
 export default router; 
