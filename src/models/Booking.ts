@@ -56,11 +56,11 @@ class Booking {
 
   /**
    * Finds a booking by its ID
-   * @param {number} id - The booking ID to find
+   * @param {string} id - The booking ID to find (UUID)
    * @returns {Promise<BookingType | null>} The found booking or null if not found
    * @throws {ServiceError} When database operation fails
    */
-  static async findById(id: number): Promise<BookingType | null> {
+  static async findById(id: string): Promise<BookingType | null> {
     try {
       const query = 'SELECT * FROM bookings WHERE id = $1';
       const result = await database.query(query, [id]);
@@ -164,14 +164,14 @@ class Booking {
 
   /**
    * Updates an existing booking
-   * @param {number} id - The booking ID to update
+   * @param {string} id - The booking ID to update (UUID)
    * @param {UpdateBookingRequest} updateData - The data to update
    * @returns {Promise<BookingType>} The updated booking object
    * @throws {ValidationError} When validation fails or no fields to update
    * @throws {NotFoundError} When booking is not found
    * @throws {ServiceError} When database operation fails
    */
-  static async update(id: number, updateData: UpdateBookingRequest): Promise<BookingType> {
+  static async update(id: string, updateData: UpdateBookingRequest): Promise<BookingType> {
     try {
       const setClauses: string[] = [];
       const values: any[] = [];
@@ -222,12 +222,12 @@ class Booking {
 
   /**
    * Deletes a booking from the database
-   * @param {number} id - The booking ID to delete
+   * @param {string} id - The booking ID to delete (UUID)
    * @returns {Promise<void>}
    * @throws {NotFoundError} When booking is not found
    * @throws {ServiceError} When database operation fails
    */
-  static async delete(id: number): Promise<void> {
+  static async delete(id: string): Promise<void> {
     try {
       const query = 'DELETE FROM bookings WHERE id = $1 RETURNING id';
       const result = await database.query(query, [id]);
@@ -416,8 +416,15 @@ class Booking {
         cancelledBookings: parseInt(stats.cancelled_bookings) || 0,
         attendedBookings: parseInt(stats.attended_bookings) || 0,
         noShowBookings: parseInt(stats.no_show_bookings) || 0,
+        pendingBookings: parseInt(stats.pending_bookings) || 0,
         attendanceRate: parseFloat(stats.attendance_rate) || 0,
-        popularTimeSlots: [] // This would need additional query for time slot analysis
+        cancellationRate: parseFloat(stats.cancellation_rate) || 0,
+        noShowRate: parseFloat(stats.no_show_rate) || 0,
+        averageBookingsPerMember: parseFloat(stats.average_bookings_per_member) || 0,
+        popularTimeSlots: [],
+        memberEngagement: [],
+        bookingTrends: [],
+        classPerformance: []
       };
 
     } catch (error) {
@@ -440,7 +447,7 @@ class Booking {
    * @param {number} id - The booking ID to find
    * @returns {Promise<BookingType | null>} The found booking or null
    */
-  static async getBookingById(id: number): Promise<BookingType | null> {
+  static async getBookingById(id: string): Promise<BookingType | null> {
     return this.findById(id);
   }
 
@@ -455,20 +462,20 @@ class Booking {
 
   /**
    * Wrapper method for updating a booking
-   * @param {number} id - The booking ID to update
+   * @param {string} id - The booking ID to update (UUID)
    * @param {UpdateBookingRequest} updateData - The data to update
    * @returns {Promise<BookingType>} The updated booking object
    */
-  static async updateBooking(id: number, updateData: UpdateBookingRequest): Promise<BookingType> {
+  static async updateBooking(id: string, updateData: UpdateBookingRequest): Promise<BookingType> {
     return this.update(id, updateData);
   }
 
   /**
    * Wrapper method for deleting a booking
-   * @param {number} id - The booking ID to delete
+   * @param {string} id - The booking ID to delete (UUID)
    * @returns {Promise<void>}
    */
-  static async deleteBooking(id: number): Promise<void> {
+  static async deleteBooking(id: string): Promise<void> {
     return this.delete(id);
   }
 

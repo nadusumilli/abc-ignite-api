@@ -167,8 +167,8 @@ export interface PaginatedResponse<T> {
     offset: number;
     page: number;
     totalPages: number;
-    hasNext: boolean;
-    hasPrev: boolean;
+    hasNext?: boolean;
+    hasPrev?: boolean;
   };
 }
 
@@ -185,14 +185,39 @@ export interface ClassStatistics {
   noShowBookings: number;
   averageAttendance: number;
   attendanceRate: number;
+  capacityUtilization: number;
+  revenueGenerated: number;
   popularClasses: Array<{
     classId: string;
     className: string;
     bookingCount: number;
+    attendanceRate: number;
+    revenue: number;
   }>;
   popularTimeSlots: Array<{
     timeSlot: string;
     bookingCount: number;
+    attendanceRate: number;
+  }>;
+  classTypeBreakdown: Array<{
+    classType: string;
+    count: number;
+    attendanceRate: number;
+    revenue: number;
+  }>;
+  instructorPerformance: Array<{
+    instructorId: string;
+    instructorName: string;
+    classesCount: number;
+    averageAttendance: number;
+    totalRevenue: number;
+  }>;
+  weeklyTrends: Array<{
+    week: string;
+    classesCount: number;
+    bookingsCount: number;
+    attendanceRate: number;
+    revenue: number;
   }>;
 }
 
@@ -202,11 +227,69 @@ export interface BookingStatistics {
   cancelledBookings: number;
   attendedBookings: number;
   noShowBookings: number;
+  pendingBookings: number;
   attendanceRate: number;
+  cancellationRate: number;
+  noShowRate: number;
+  averageBookingsPerMember: number;
   popularTimeSlots: Array<{
     timeSlot: string;
     bookingCount: number;
+    attendanceRate: number;
   }>;
+  memberEngagement: Array<{
+    memberId: string;
+    memberName: string;
+    totalBookings: number;
+    attendedBookings: number;
+    attendanceRate: number;
+    lastBookingDate: string;
+  }>;
+  bookingTrends: Array<{
+    date: string;
+    bookingsCount: number;
+    attendanceCount: number;
+    cancellationCount: number;
+  }>;
+  classPerformance: Array<{
+    classId: string;
+    className: string;
+    bookingsCount: number;
+    attendanceRate: number;
+    averageCapacity: number;
+  }>;
+}
+
+export interface DashboardStatistics {
+  overview: {
+    totalClasses: number;
+    totalBookings: number;
+    totalMembers: number;
+    totalInstructors: number;
+    activeClasses: number;
+    pendingBookings: number;
+    todayBookings: number;
+    thisWeekRevenue: number;
+  };
+  performance: {
+    attendanceRate: number;
+    capacityUtilization: number;
+    cancellationRate: number;
+    noShowRate: number;
+    averageBookingsPerMember: number;
+    averageRevenuePerClass: number;
+  };
+  trends: {
+    weeklyBookings: Array<{ week: string; count: number; revenue: number }>;
+    monthlyRevenue: Array<{ month: string; revenue: number; bookings: number }>;
+    popularClasses: Array<{ name: string; bookings: number; revenue: number }>;
+    topInstructors: Array<{ name: string; classes: number; attendance: number }>;
+  };
+  alerts: {
+    lowAttendanceClasses: Array<{ classId: string; className: string; attendanceRate: number }>;
+    highCancellationClasses: Array<{ classId: string; className: string; cancellationRate: number }>;
+    upcomingFullClasses: Array<{ classId: string; className: string; capacity: number; bookings: number }>;
+  };
 }
 
 // Search types

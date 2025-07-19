@@ -312,6 +312,7 @@ class Member {
         pagination: {
           page,
           limit,
+          offset,
           total,
           totalPages: Math.ceil(total / limit),
           hasNext: page < Math.ceil(total / limit),

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import ClassService from '../services/ClassService';
-import { ValidationError, NotFoundError, ConflictError, ServiceError } from '../utils/errors';
+import { ValidationError, NotFoundError, ConflictError, ServiceError, BusinessError } from '../utils/errors';
 import logger from '../utils/logger';
 import { asyncHandler } from '../middleware/errorHandler';
 import { AuthenticatedRequest, ClassFilters, CreateClassRequest, UpdateClassRequest } from '../types';
@@ -24,11 +24,15 @@ class ClassController {
       const result = await ClassService.createClass(classData);
       
       const responseTime = Date.now() - startTime;
-      logger.logRequest('POST', '/api/classes', 201, responseTime, { classId: result.id });
+      logger.logRequest('POST', '/api/classes', 201, responseTime, { 
+        classesCreated: result.length,
+        classIds: result.map(c => c.id)
+      });
       
       res.status(201).json({
         success: true,
-        data: result
+        data: result,
+        message: `Successfully created ${result.length} classes`
       });
     } catch (error) {
       const responseTime = Date.now() - startTime;
@@ -73,9 +77,9 @@ class ClassController {
     const startTime = Date.now();
     
     try {
-      const classId = parseInt(req.params['id'] || '');
+      const classId = req.params['id'] || '';
       
-      if (isNaN(classId)) {
+      if (!classId || classId.trim() === '') {
         const responseTime = Date.now() - startTime;
         logger.logRequest('GET', `/api/classes/${req.params['id']}`, 400, responseTime, { error: 'Invalid class ID' });
         res.status(400).json({
@@ -192,9 +196,9 @@ class ClassController {
     const startTime = Date.now();
     
     try {
-      const classId = parseInt(req.params['id'] || '');
+      const classId = req.params['id'] || '';
       
-      if (isNaN(classId)) {
+      if (!classId || classId.trim() === '') {
         const responseTime = Date.now() - startTime;
         logger.logRequest('PUT', `/api/classes/${req.params['id']}`, 400, responseTime, { error: 'Invalid class ID' });
         res.status(400).json({
@@ -225,6 +229,7 @@ class ClassController {
         res.status(400).json({
           success: false,
           error: 'Validation Error',
+          errorCode: error.errorCode,
           message: error.message,
           details: error.details
         });
@@ -246,8 +251,21 @@ class ClassController {
         res.status(409).json({
           success: false,
           error: 'Conflict Error',
+          errorCode: error.errorCode,
           message: error.message,
           details: error.details
+        });
+        return;
+      }
+
+      // Handle BusinessError (custom business logic errors)
+      if (error instanceof BusinessError) {
+        logger.logRequest('PUT', `/api/classes/${classId}`, 422, responseTime, { error: error.message });
+        res.status(422).json({
+          success: false,
+          error: 'Business Rule Violation',
+          errorCode: error.errorCode,
+          message: error.message
         });
         return;
       }
@@ -270,9 +288,9 @@ class ClassController {
     const startTime = Date.now();
     
     try {
-      const classId = parseInt(req.params['id'] || '');
+      const classId = req.params['id'] || '';
       
-      if (isNaN(classId)) {
+      if (!classId || classId.trim() === '') {
         const responseTime = Date.now() - startTime;
         logger.logRequest('DELETE', `/api/classes/${req.params['id']}`, 400, responseTime, { error: 'Invalid class ID' });
         res.status(400).json({
@@ -335,9 +353,9 @@ class ClassController {
     const startTime = Date.now();
     
     try {
-      const classId = parseInt(req.params['id'] || '');
+      const classId = req.params['id'] || '';
       
-      if (isNaN(classId)) {
+      if (!classId || classId.trim() === '') {
         const responseTime = Date.now() - startTime;
         logger.logRequest('GET', `/api/classes/${req.params['id']}/statistics`, 400, responseTime, { error: 'Invalid class ID' });
         res.status(400).json({
@@ -446,7 +464,7 @@ class ClassController {
     const startTime = Date.now();
     
     try {
-      const classId = parseInt(req.params['id'] || '');
+      const classId = req.params['id'] || '';
       const filters = {
         classId,
         limit: parseInt(req.query['limit'] as string) || 20,

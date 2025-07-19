@@ -355,8 +355,8 @@ class MemberController {
         'X-Page': result.pagination.page.toString(),
         'X-Limit': result.pagination.limit.toString(),
         'X-Total-Pages': result.pagination.totalPages.toString(),
-        'X-Has-Next': result.pagination.hasNext.toString(),
-        'X-Has-Prev': result.pagination.hasPrev.toString()
+        'X-Has-Next': (result.pagination.hasNext || false).toString(),
+        'X-Has-Prev': (result.pagination.hasPrev || false).toString()
       });
       
       res.status(200).json(response);

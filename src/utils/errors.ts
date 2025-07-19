@@ -106,6 +106,17 @@ export class RateLimitError extends AppError {
 }
 
 /**
+ * Business logic error for specific business rule violations
+ * Uses 422 Unprocessable Entity for business rule violations
+ */
+export class BusinessError extends AppError {
+  constructor(message: string, errorCode: string) {
+    super(message, 422, errorCode);
+    this.name = 'BusinessError';
+  }
+}
+
+/**
  * Error factory for creating appropriate error types
  */
 export class ErrorFactory {
@@ -163,5 +174,12 @@ export class ErrorFactory {
    */
   static rateLimit(message: string): RateLimitError {
     return new RateLimitError(message);
+  }
+
+  /**
+   * Creates a business logic error
+   */
+  static business(message: string, errorCode: string): BusinessError {
+    return new BusinessError(message, errorCode);
   }
 }

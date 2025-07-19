@@ -3,6 +3,7 @@ import classRoutes from './classRoutes';
 import bookingRoutes from './bookingRoutes';
 import instructorRoutes from './instructorRoutes';
 import memberRoutes from './memberRoutes';
+import analyticsRoutes from './analyticsRoutes';
 import logger from '../utils/logger';
 import database from '../config/database';
 
@@ -70,6 +71,7 @@ router.use('/classes', classRoutes);
 router.use('/bookings', bookingRoutes);
 router.use('/instructors', instructorRoutes);
 router.use('/members', memberRoutes);
+  router.use('/analytics', analyticsRoutes);
 
 /**
  * 404 handler for undefined API routes

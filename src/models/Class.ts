@@ -76,11 +76,11 @@ class Class {
     try {
       const query = 'SELECT * FROM classes WHERE id = $1';
       const result = await database.query(query, [id]);
-
+      
       if (result.rows.length === 0) {
         return null;
       }
-
+      
       return this.mapDatabaseRowToClass(result.rows[0]);
 
     } catch (error) {
@@ -143,7 +143,7 @@ class Class {
       const offset = filters.offset || 0;
       const dataQuery = `
         SELECT * FROM classes 
-        ${whereClause} 
+        ${whereClause}
         ${orderClause} 
         LIMIT $${valueIndex} OFFSET $${valueIndex + 1}
       `;
@@ -199,8 +199,8 @@ class Class {
             setClauses.push(`${dbField} = $${valueIndex}`);
             values.push(value);
           }
-          valueIndex++;
-        }
+        valueIndex++;
+      }
       });
 
       if (setClauses.length === 0) {
@@ -209,14 +209,14 @@ class Class {
 
       setClauses.push(`updated_at = $${valueIndex}`);
       values.push(new Date());
-      valueIndex++;
+        valueIndex++;
 
       values.push(id);
 
       const query = `
         UPDATE classes 
         SET ${setClauses.join(', ')} 
-        WHERE id = $${valueIndex} 
+        WHERE id = $${valueIndex}
         RETURNING *
       `;
 
@@ -521,9 +521,19 @@ class Class {
         popularClasses: [{
           classId: classData.id,
           className: classData.name,
-          bookingCount: parseInt(stats.total_bookings) || 0
+          bookingCount: parseInt(stats.total_bookings) || 0,
+          attendanceRate: parseFloat(stats.attendance_rate) || 0,
+          revenue: classData.price || 0
         }],
-        popularTimeSlots
+        popularTimeSlots: popularTimeSlots.map(slot => ({
+          ...slot,
+          attendanceRate: parseFloat(stats.attendance_rate) || 0
+        })),
+        capacityUtilization: classData.maxCapacity > 0 ? (parseInt(stats.total_bookings) / classData.maxCapacity) * 100 : 0,
+        revenueGenerated: (parseInt(stats.total_bookings) || 0) * (classData.price || 0),
+        classTypeBreakdown: [],
+        instructorPerformance: [],
+        weeklyTrends: []
       };
 
     } catch (error) {
@@ -657,4 +667,4 @@ class Class {
   }
 }
 
-export default Class;
+export default Class; 

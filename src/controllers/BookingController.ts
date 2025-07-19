@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import BookingService from '../services/BookingService';
-import { ValidationError, NotFoundError, ConflictError, ServiceError } from '../utils/errors';
+import { ValidationError, NotFoundError, ConflictError, ServiceError, BusinessError } from '../utils/errors';
 import logger from '../utils/logger';
 import { asyncHandler } from '../middleware/errorHandler';
 import { AuthenticatedRequest, BookingFilters, CreateBookingRequest, UpdateBookingRequest } from '../types';
@@ -54,6 +54,18 @@ class BookingController {
         });
         return;
       }
+
+      // Handle BusinessError (custom business logic errors)
+      if (error instanceof BusinessError) {
+        logger.logRequest('POST', '/api/bookings', 422, responseTime, { error: error.message });
+        res.status(422).json({
+          success: false,
+          error: 'Business Rule Violation',
+          errorCode: error.errorCode,
+          message: error.message
+        });
+        return;
+      }
       
       logger.logError('Booking creation failed', error, { requestBody: req.body, responseTime });
       res.status(500).json({
@@ -73,9 +85,9 @@ class BookingController {
     const startTime = Date.now();
     
     try {
-      const bookingId = parseInt(req.params['id'] || '');
+      const bookingId = req.params['id'] || '';
       
-      if (isNaN(bookingId)) {
+      if (!bookingId || bookingId.trim() === '') {
         const responseTime = Date.now() - startTime;
         logger.logRequest('GET', `/api/bookings/${req.params['id']}`, 400, responseTime, { error: 'Invalid booking ID' });
         res.status(400).json({
@@ -138,7 +150,7 @@ class BookingController {
       const filters: BookingFilters = {
         ...(req.query['startDate'] && { startDate: req.query['startDate'] as string }),
         ...(req.query['endDate'] && { endDate: req.query['endDate'] as string }),
-        ...(req.query['classId'] && { classId: parseInt(req.query['classId'] as string) }),
+        ...(req.query['classId'] && { classId: req.query['classId'] as string }),
         ...(req.query['memberName'] && { memberName: req.query['memberName'] as string }),
         ...(req.query['status'] && { status: req.query['status'] as string }),
         ...(req.query['limit'] && { limit: parseInt(req.query['limit'] as string) }),
@@ -187,9 +199,9 @@ class BookingController {
     const startTime = Date.now();
     
     try {
-      const bookingId = parseInt(req.params['id'] || '');
+      const bookingId = req.params['id'] || '';
       
-      if (isNaN(bookingId)) {
+      if (!bookingId || bookingId.trim() === '') {
         const responseTime = Date.now() - startTime;
         logger.logRequest('PUT', `/api/bookings/${req.params['id']}`, 400, responseTime, { error: 'Invalid booking ID' });
         res.status(400).json({
@@ -207,7 +219,10 @@ class BookingController {
       const responseTime = Date.now() - startTime;
       logger.logRequest('PUT', `/api/bookings/${bookingId}`, 200, responseTime);
       
-      res.status(200).json(result);
+      res.status(200).json({
+        success: true,
+        data: result
+      });
     } catch (error) {
       const responseTime = Date.now() - startTime;
       const bookingId = req.params['id'];
@@ -232,6 +247,18 @@ class BookingController {
         });
         return;
       }
+
+      // Handle BusinessError (custom business logic errors)
+      if (error instanceof BusinessError) {
+        logger.logRequest('PUT', `/api/bookings/${bookingId}`, 422, responseTime, { error: error.message });
+        res.status(422).json({
+          success: false,
+          error: 'Business Rule Violation',
+          errorCode: error.errorCode,
+          message: error.message
+        });
+        return;
+      }
       
       logger.logError('Booking update failed', error, { bookingId, updateData: req.body, responseTime });
       res.status(500).json({
@@ -251,9 +278,9 @@ class BookingController {
     const startTime = Date.now();
     
     try {
-      const bookingId = parseInt(req.params['id'] || '');
+      const bookingId = req.params['id'] || '';
       
-      if (isNaN(bookingId)) {
+      if (!bookingId || bookingId.trim() === '') {
         const responseTime = Date.now() - startTime;
         logger.logRequest('DELETE', `/api/bookings/${req.params['id']}`, 400, responseTime, { error: 'Invalid booking ID' });
         res.status(400).json({
@@ -264,12 +291,15 @@ class BookingController {
         return;
       }
       
-      const result = await BookingService.deleteBooking(bookingId);
+      await BookingService.deleteBooking(bookingId);
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('DELETE', `/api/bookings/${bookingId}`, 200, responseTime);
       
-      res.status(200).json(result);
+      res.status(200).json({
+        success: true,
+        message: 'Booking deleted successfully'
+      });
     } catch (error) {
       const responseTime = Date.now() - startTime;
       const bookingId = req.params['id'];
@@ -309,41 +339,51 @@ class BookingController {
    * @param req - Authenticated request object
    * @param res - Response object
    */
+  /**
+   * Search bookings according to business requirements
+   * @param req - Authenticated request object
+   * @param res - Response object
+   */
   static searchBookings = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const startTime = Date.now();
     
     try {
-      const query = req.query['q'] as string;
-      const limit = parseInt(req.query['limit'] as string) || 20;
-      const offset = parseInt(req.query['offset'] as string) || 0;
+      const memberName = req.query['member'] as string;
       const startDate = req.query['startDate'] as string;
       const endDate = req.query['endDate'] as string;
-      const classId = req.query['classId'] ? parseInt(req.query['classId'] as string) : undefined;
+      const limit = parseInt(req.query['limit'] as string) || 20;
+      const offset = parseInt(req.query['offset'] as string) || 0;
       
-      if (!query) {
+      // Validate that at least one search parameter is provided
+      if (!memberName && !startDate && !endDate) {
         res.status(400).json({
           success: false,
           error: 'Validation Error',
-          message: 'Query parameter q is required.'
+          message: 'At least one search parameter is required: member, startDate, or endDate'
         });
         return;
       }
+      
       const result = await BookingService.searchBookings({
-        query,
-        ...(limit && { limit }),
-        ...(offset && { offset }),
-        ...(startDate && { startDate }),
-        ...(endDate && { endDate }),
-        ...(classId !== undefined ? { classId } : {}),
+        memberName,
+        startDate,
+        endDate,
+        limit,
+        offset
       });
       
       const responseTime = Date.now() - startTime;
       logger.logRequest('GET', '/api/bookings/search', 200, responseTime, { 
-        query, 
+        memberName, 
+        startDate,
+        endDate,
         count: result.data?.length 
       });
       
-      res.status(200).json(result);
+      res.status(200).json({
+        success: true,
+        ...result
+      });
     } catch (error) {
       const responseTime = Date.now() - startTime;
       
@@ -376,9 +416,9 @@ class BookingController {
     const startTime = Date.now();
     
     try {
-      const bookingId = parseInt(req.params['id'] || '');
+      const bookingId = req.params['id'] || '';
       
-      if (isNaN(bookingId)) {
+      if (!bookingId || bookingId.trim() === '') {
         const responseTime = Date.now() - startTime;
         logger.logRequest('POST', `/api/bookings/${req.params['id']}/cancel`, 400, responseTime, { error: 'Invalid booking ID' });
         res.status(400).json({
@@ -438,7 +478,18 @@ class BookingController {
     const startTime = Date.now();
     
     try {
-      const bookingId = parseInt(req.params['id'] || '');
+      const bookingId = req.params['id'] || '';
+      
+      if (!bookingId || bookingId.trim() === '') {
+        const responseTime = Date.now() - startTime;
+        logger.logRequest('POST', `/api/bookings/${req.params['id']}/attend`, 400, responseTime, { error: 'Invalid booking ID' });
+        res.status(400).json({
+          success: false,
+          error: 'Validation Error',
+          message: 'Invalid booking ID'
+        });
+        return;
+      }
       
       const result = await BookingService.markBookingAttended(bookingId);
       
